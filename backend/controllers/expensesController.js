@@ -3,7 +3,7 @@ import Expense from '../models/Expense.js';
 // Add a new expense for authenticated user
 export const addExpense = async (req, res) => {
   try {
-    const { amount, category, paymentMethod, description, entryMethod } = req.body;
+    const { amount, category, paymentMethod = 'Cash', description, entryMethod = 'manual', upiApp = 'Google Pay', utrNumber = '' } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ message: 'Please enter an amount greater than 0.' });
@@ -14,18 +14,25 @@ export const addExpense = async (req, res) => {
       return res.status(400).json({ message: 'Please select a valid expense category.' });
     }
 
+    const validMethods = ['Cash', 'UPI', 'Card'];
+    const chosenMethod = validMethods.includes(paymentMethod) ? paymentMethod : 'Cash';
+
     const expense = await Expense.create({
       userId: req.user._id,
       amount: Number(amount),
       category,
-      paymentMethod: paymentMethod || 'Cash',
-      description: description || '',
-      entryMethod: entryMethod === 'scanned' ? 'scanned' : 'manual',
-      paymentStatus: 'recorded',
+      paymentMethod: chosenMethod,
+      upiApp: chosenMethod === 'UPI' ? upiApp : '',
+      utrNumber: utrNumber ? utrNumber.trim() : '',
+      description: description || (chosenMethod === 'UPI' ? `${category} paid via ${upiApp}` : `${category} Expense`),
+      entryMethod: entryMethod === 'scanned' ? 'scanned' : entryMethod === 'automatic' ? 'automatic' : 'manual',
+      paymentStatus: 'success',
+      provider: chosenMethod === 'UPI' ? upiApp : chosenMethod === 'Card' ? 'Card POS' : 'Manual',
+      providerTransactionId: utrNumber ? utrNumber.trim() : (chosenMethod === 'UPI' ? `UPI_OUT_${Date.now()}` : undefined),
     });
 
     res.status(201).json({
-      message: 'Expense added successfully.',
+      message: `${chosenMethod} expense recorded successfully.`,
       expense,
     });
   } catch (error) {

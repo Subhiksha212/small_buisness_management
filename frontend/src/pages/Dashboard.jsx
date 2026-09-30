@@ -330,7 +330,9 @@ const Dashboard = () => {
                       </div>
                     </td>
                     <td>
-                      <span className="cell-payment-tag">{tx.paymentMethod || 'Cash'}</span>
+                      <span className={`cell-payment-tag ${tx.paymentMethod === 'UPI' ? 'pm-upi-tag' : ''}`}>
+                        {tx.paymentMethod === 'UPI' && tx.upiApp ? tx.upiApp : (tx.paymentMethod || 'Cash')}
+                      </span>
                     </td>
                     <td>
                       <span className={`micro-source-pill ${tx.entryMethod === 'scanned' ? 'src-scanned' : tx.entryMethod === 'automatic' ? 'src-auto' : 'src-manual'}`}>

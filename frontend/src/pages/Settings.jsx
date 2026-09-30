@@ -11,8 +11,11 @@ import {
   Wallet,
   CreditCard,
   Zap,
-  AlertTriangle,
   Lock,
+  QrCode,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Sparkles,
 } from 'lucide-react';
 
 const Settings = () => {
@@ -22,14 +25,14 @@ const Settings = () => {
   const [testSuccess, setTestSuccess] = useState('');
 
   // Payment Setup Form State
-  const [upiProvider, setUpiProvider] = useState('Razorpay');
+  const [upiProvider, setUpiProvider] = useState('Google Pay');
   const [merchantVpa, setMerchantVpa] = useState('');
   const [cardProvider, setCardProvider] = useState('Razorpay');
 
   const [paymentStatus, setPaymentStatus] = useState({
     upiConnected: false,
     cardConnected: false,
-    providerName: 'Not Connected',
+    providerName: 'Google Pay',
     merchantVpa: '',
   });
 
@@ -42,6 +45,7 @@ const Settings = () => {
       const status = await getPaymentStatus();
       setPaymentStatus(status);
       if (status.merchantVpa) setMerchantVpa(status.merchantVpa);
+      if (status.upiProvider) setUpiProvider(status.upiProvider);
     } catch (err) {
       console.error('Error loading payment connection status:', err);
     }
@@ -58,12 +62,13 @@ const Settings = () => {
     try {
       const res = await saveMerchantConfig({
         provider: upiProvider,
-        merchantVpa,
+        merchantVpa: merchantVpa.trim(),
       });
       setPaymentStatus((prev) => ({
         ...prev,
         upiConnected: res.upiConnected,
-        merchantVpa,
+        merchantVpa: merchantVpa.trim(),
+        providerName: upiProvider,
       }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -89,15 +94,26 @@ const Settings = () => {
     }
   };
 
-  const handleRunTestPayment = async (amount, method) => {
+  const handleRunSimulatedPayment = async (direction, amount, upiApp = 'Google Pay', category = 'Stock') => {
     try {
-      const res = await simulateTestPayment(amount, method);
+      const res = await simulateTestPayment({
+        direction,
+        amount,
+        paymentMethod: 'UPI',
+        upiApp,
+        category,
+      });
       setTestSuccess(res.message);
-      setTimeout(() => setTestSuccess(''), 4000);
+      setTimeout(() => setTestSuccess(''), 4500);
     } catch (err) {
-      alert('Failed to execute test payment.');
+      alert('Failed to execute simulated payment.');
     }
   };
+
+  // Google Pay QR Link
+  const displayVpa = merchantVpa || paymentStatus.merchantVpa || 'shop@okhdfcbank';
+  const upiIntentString = `upi://pay?pa=${encodeURIComponent(displayVpa)}&pn=${encodeURIComponent(shopName)}&cu=INR`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(upiIntentString)}`;
 
   return (
     <div className="section-page-container">
@@ -105,7 +121,7 @@ const Settings = () => {
       <div className="page-intro-bar">
         <div>
           <h2 className="section-title">{t('navSettings')}</h2>
-          <p className="section-subtitle">Store identity, localization preferences, and automated payment gateways</p>
+          <p className="section-subtitle">Store identity, localization preferences, and Google Pay & UPI integrations</p>
         </div>
       </div>
 
@@ -174,6 +190,33 @@ const Settings = () => {
               Save Profile Changes
             </button>
           </form>
+
+          {/* Live Store QR Preview */}
+          <div className="store-qr-preview-box mt-16">
+            <div className="flex-align-gap mb-8">
+              <QrCode size={16} className="text-cyan" />
+              <strong style={{ fontSize: '13px' }}>Store Google Pay / UPI QR Code</strong>
+            </div>
+            <p className="micro-notice">
+              Customers scan this QR code with <strong>Google Pay (GPay)</strong>, PhonePe, or Paytm to pay directly to your VPA: <code>{displayVpa}</code>
+            </p>
+            <div className="qr-preview-flex">
+              <img src={qrCodeUrl} alt="Store UPI QR Code" className="store-qr-img" />
+              <div className="qr-info-right">
+                <span className="badge-gpay-pill">Google Pay Ready</span>
+                <span className="vpa-text-display">{displayVpa}</span>
+                <span className="merchant-name-display">{shopName}</span>
+                <a
+                  href={upiIntentString}
+                  className="link-gpay-intent"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open UPI Link
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT COLUMN: PAYMENT GATEWAYS & DEV SIMULATOR */}
@@ -183,33 +226,35 @@ const Settings = () => {
             <div className="panel-header-compact">
               <div className="flex-align-gap">
                 <Wallet size={15} className="text-purple" />
-                <h3 className="panel-heading">1. {t('upiStatus')}</h3>
+                <h3 className="panel-heading">1. Google Pay & UPI Connection</h3>
               </div>
               <span className={`status-micro-pill ${paymentStatus.upiConnected ? 'pill-profit' : 'pill-standby'}`}>
-                {paymentStatus.upiConnected ? '● Connected' : '○ Standby'}
+                {paymentStatus.upiConnected ? '● Active' : '○ Standby'}
               </span>
             </div>
 
             <form onSubmit={handleConnectUpi} className="compact-form">
               <div className="form-group-compact">
-                <label className="field-label-compact">{t('selectProvider')}</label>
+                <label className="field-label-compact">Primary UPI Provider</label>
                 <select
                   value={upiProvider}
                   onChange={(e) => setUpiProvider(e.target.value)}
                   className="sleek-select-input"
                 >
+                  <option value="Google Pay">Google Pay (GPay) — UPI Direct & Business</option>
+                  <option value="PhonePe">PhonePe Business</option>
+                  <option value="Paytm">Paytm for Business</option>
+                  <option value="BHIM UPI">BHIM UPI / Bank UPI</option>
                   <option value="Razorpay">Razorpay Merchant Gateway</option>
                   <option value="Cashfree">Cashfree Payments</option>
-                  <option value="Paytm">Paytm Business</option>
-                  <option value="PhonePe">PhonePe Business</option>
                 </select>
               </div>
 
               <div className="form-group-compact">
-                <label className="field-label-compact">{t('merchantVpaLabel')}</label>
+                <label className="field-label-compact">Merchant UPI ID / VPA (GPay / Bank Handle)</label>
                 <input
                   type="text"
-                  placeholder="e.g. yourstore@razorpay"
+                  placeholder="e.g. yourname@okhdfcbank, store@okaxis, or 9876543210@paytm"
                   value={merchantVpa}
                   onChange={(e) => setMerchantVpa(e.target.value)}
                   className="sleek-text-input"
@@ -217,7 +262,7 @@ const Settings = () => {
               </div>
 
               <button type="submit" className="sleek-btn-primary btn-emerald">
-                {t('connectUpi')}
+                Save & Connect Google Pay
               </button>
             </form>
           </div>
@@ -259,15 +304,19 @@ const Settings = () => {
             </form>
           </div>
 
-          {/* Developer Webhook Simulator */}
+          {/* Developer Webhook Simulator (Receive & Send Money) */}
           <div className="sleek-panel test-simulator-panel">
             <div className="panel-header-compact">
               <div className="flex-align-gap">
                 <Zap size={15} className="text-amber" />
-                <h3 className="panel-heading">{t('developerTestMode')}</h3>
+                <h3 className="panel-heading">GPay & UPI Live Simulator</h3>
               </div>
-              <span className="badge-test-mode">Sandbox</span>
+              <span className="badge-test-mode">Instant Sync</span>
             </div>
+
+            <p className="micro-notice">
+              Test instant real-time ledger updates when receiving money (Customer payment) or sending money (Vendor payout) via Google Pay:
+            </p>
 
             {testSuccess && (
               <div className="alert-compact alert-success mb-10">
@@ -279,17 +328,17 @@ const Settings = () => {
             <div className="simulator-actions-strip">
               <button
                 type="button"
-                className="sim-chip-btn sim-purple"
-                onClick={() => handleRunTestPayment(1000, 'UPI')}
+                className="sim-chip-btn sim-emerald"
+                onClick={() => handleRunSimulatedPayment('received', 500, 'Google Pay')}
               >
-                <Zap size={13} /> {t('simulateUpiTest')}
+                <ArrowDownLeft size={13} /> Receive ₹500 via GPay (Sale)
               </button>
               <button
                 type="button"
-                className="sim-chip-btn sim-blue"
-                onClick={() => handleRunTestPayment(2500, 'Card')}
+                className="sim-chip-btn sim-rose"
+                onClick={() => handleRunSimulatedPayment('sent', 350, 'Google Pay', 'Stock')}
               >
-                <Zap size={13} /> {t('simulateCardTest')}
+                <ArrowUpRight size={13} /> Send ₹350 via GPay (Expense)
               </button>
             </div>
           </div>

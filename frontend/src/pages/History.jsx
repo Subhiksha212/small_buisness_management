@@ -39,8 +39,10 @@ const Transactions = () => {
         id: s._id,
         rawId: s._id,
         type: 'Sale',
-        detail: s.description || (s.entryMethod === 'automatic' ? `${s.provider} Payment` : 'Shop Sale'),
+        detail: s.description || (s.entryMethod === 'automatic' ? `${s.provider || 'UPI'} Payment` : 'Shop Sale'),
         paymentMethod: s.paymentMethod,
+        upiApp: s.upiApp || s.provider,
+        utrNumber: s.utrNumber,
         entryMethod: s.entryMethod || 'manual',
         paymentStatus: s.paymentStatus || 'recorded',
         amount: s.amount,
@@ -53,6 +55,8 @@ const Transactions = () => {
         type: 'Expense',
         detail: e.description || e.category,
         paymentMethod: e.paymentMethod || 'Cash',
+        upiApp: e.upiApp || e.provider,
+        utrNumber: e.utrNumber,
         entryMethod: e.entryMethod || 'manual',
         paymentStatus: e.paymentStatus || 'recorded',
         amount: e.amount,
@@ -277,7 +281,12 @@ const Transactions = () => {
                     </td>
 
                     <td>
-                      <span className="cell-payment-tag">{tx.paymentMethod}</span>
+                      <span className={`cell-payment-tag ${tx.paymentMethod === 'UPI' ? 'pm-upi-tag' : ''}`}>
+                        {tx.paymentMethod === 'UPI' && tx.upiApp ? tx.upiApp : tx.paymentMethod}
+                        {tx.utrNumber ? (
+                          <span className="cell-utr-sub">UTR •••{tx.utrNumber.slice(-4)}</span>
+                        ) : null}
+                      </span>
                     </td>
 
                     <td>

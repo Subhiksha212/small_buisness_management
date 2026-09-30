@@ -109,8 +109,14 @@ export const saveMerchantConfig = async (config) => {
   return response.data;
 };
 
-export const simulateTestPayment = async (amount, paymentMethod) => {
-  const response = await api.post('/payments/simulate-test-payment', { amount, paymentMethod });
+export const simulateTestPayment = async (options) => {
+  const payload = typeof options === 'object' ? options : { amount: options, paymentMethod: 'UPI' };
+  const response = await api.post('/payments/simulate-test-payment', payload);
+  return response.data;
+};
+
+export const recordUpiPayment = async (upiData) => {
+  const response = await api.post('/payments/record-upi', upiData);
   return response.data;
 };
 

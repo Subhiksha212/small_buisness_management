@@ -38,10 +38,18 @@ const saleSchema = new mongoose.Schema(
       type: String,
       default: 'Manual',
     },
+    upiApp: {
+      type: String,
+      default: 'Google Pay',
+    },
+    utrNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     providerTransactionId: {
       type: String,
       sparse: true,
-      unique: true,
     },
   },
   {

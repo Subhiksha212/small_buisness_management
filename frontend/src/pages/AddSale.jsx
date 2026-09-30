@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { createSale, getPaymentStatus, getAutomaticPayments } from '../services/api';
+import {
+  createSale,
+  getPaymentStatus,
+  getAutomaticPayments,
+  simulateTestPayment,
+} from '../services/api';
 import {
   CheckCircle,
   AlertCircle,
@@ -14,6 +19,10 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
+  QrCode,
+  Smartphone,
+  Banknote,
+  Zap,
 } from 'lucide-react';
 
 const AddSale = () => {
@@ -22,15 +31,21 @@ const AddSale = () => {
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('UPI'); // Default to UPI / GPay as requested
+  const [upiApp, setUpiApp] = useState('Google Pay');
+  const [utrNumber, setUtrNumber] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [simulating, setSimulating] = useState(false);
 
   // Connection & Automatic payments state
   const [connectionStatus, setConnectionStatus] = useState({
     upiConnected: false,
     cardConnected: false,
-    providerName: 'Not Connected',
+    providerName: 'Google Pay',
+    merchantVpa: '',
+    upiProvider: 'Google Pay',
   });
   const [autoPayments, setAutoPayments] = useState([]);
 
@@ -56,7 +71,7 @@ const AddSale = () => {
     setAmount((current + preset).toString());
   };
 
-  const handleSaveCashSale = async (e) => {
+  const handleSaveSale = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -68,24 +83,66 @@ const AddSale = () => {
 
     try {
       setLoading(true);
-      await createSale({
+      const salePayload = {
         amount: Number(amount),
-        paymentMethod: 'Cash',
-        description: description.trim() || 'Retail Cash Sale',
+        paymentMethod,
+        description:
+          description.trim() ||
+          (paymentMethod === 'UPI'
+            ? `${upiApp} Customer Payment`
+            : paymentMethod === 'Card'
+            ? 'Card POS Sale'
+            : 'Retail Cash Sale'),
         entryMethod: 'manual',
-      });
+        upiApp: paymentMethod === 'UPI' ? upiApp : '',
+        utrNumber: utrNumber ? utrNumber.trim() : '',
+      };
 
-      setSuccess(t('saleAddedSuccess'));
+      await createSale(salePayload);
+
+      setSuccess(
+        paymentMethod === 'UPI'
+          ? `₹${amount} ${upiApp} payment recorded successfully!`
+          : t('saleAddedSuccess')
+      );
       setAmount('');
       setDescription('');
+      setUtrNumber('');
+
+      await fetchPaymentData();
 
       setTimeout(() => {
         navigate('/transactions');
-      }, 1000);
+      }, 1200);
     } catch (err) {
       setError(err.response?.data?.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Quick simulation helper
+  const handleQuickSimulateGPay = async () => {
+    const simAmount = Number(amount) > 0 ? Number(amount) : 500;
+    setError('');
+    setSuccess('');
+    try {
+      setSimulating(true);
+      const res = await simulateTestPayment({
+        amount: simAmount,
+        provider: upiApp,
+        direction: 'received',
+        upiApp: upiApp,
+        note: `Customer scanned GPay QR and paid ₹${simAmount}`,
+      });
+      setSuccess(res.message || `₹${simAmount} received via ${upiApp}! Sale registered.`);
+      await fetchPaymentData();
+      setAmount('');
+      setUtrNumber('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to simulate payment');
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -94,18 +151,29 @@ const AddSale = () => {
     return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Dynamic QR Code generation for UPI/GPay
+  const activeVpa = connectionStatus.merchantVpa || 'merchant@okaxis';
+  const qrUpiUrl = `upi://pay?pa=${encodeURIComponent(activeVpa)}&pn=${encodeURIComponent(
+    'Smart Shop'
+  )}&am=${encodeURIComponent(amount || '')}&cu=INR`;
+  const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+    qrUpiUrl
+  )}&margin=10`;
+
   return (
     <div className="section-page-container">
       {/* Page Title & Breadcrumb */}
       <div className="page-intro-bar">
         <div>
           <h2 className="section-title">Sales Management</h2>
-          <p className="section-subtitle">Record cash transactions & monitor incoming digital streams</p>
+          <p className="section-subtitle">
+            Accept Google Pay, UPI QR codes, Cash & Card payments with instant ledger updates
+          </p>
         </div>
       </div>
 
       <div className="split-grid-layout">
-        {/* LEFT COLUMN: COMPACT CASH SALE FORM */}
+        {/* LEFT COLUMN: SALE ENTRY FORM */}
         <div className="sleek-panel main-form-panel">
           <div className="panel-header-compact">
             <div className="flex-align-gap">
@@ -113,11 +181,13 @@ const AddSale = () => {
                 <TrendingUp size={16} />
               </span>
               <div>
-                <h3 className="panel-heading">Record Cash Sale</h3>
-                <span className="panel-subheading">Instant counter sale voucher</span>
+                <h3 className="panel-heading">Record Customer Sale</h3>
+                <span className="panel-subheading">Cash or Google Pay / UPI counter payment</span>
               </div>
             </div>
-            <span className="pill-active-mode">Direct Entry</span>
+            <span className="pill-active-mode">
+              {paymentMethod === 'UPI' ? '● GPay / UPI Ready' : 'Direct Entry'}
+            </span>
           </div>
 
           {error && (
@@ -134,7 +204,58 @@ const AddSale = () => {
             </div>
           )}
 
-          <form onSubmit={handleSaveCashSale} className="compact-form">
+          <form onSubmit={handleSaveSale} className="compact-form">
+            {/* Payment Method Selector Tabs */}
+            <div className="form-group-compact">
+              <label className="field-label-compact">{t('paymentMethodLabel') || 'Payment Method'}</label>
+              <div className="payment-method-selector-compact">
+                <button
+                  type="button"
+                  className={`pm-pill-btn ${paymentMethod === 'UPI' ? 'pm-pill-active' : ''}`}
+                  onClick={() => setPaymentMethod('UPI')}
+                >
+                  <Smartphone size={14} />
+                  <span>Google Pay / UPI</span>
+                </button>
+                <button
+                  type="button"
+                  className={`pm-pill-btn ${paymentMethod === 'Cash' ? 'pm-pill-active' : ''}`}
+                  onClick={() => setPaymentMethod('Cash')}
+                >
+                  <Banknote size={14} />
+                  <span>Cash</span>
+                </button>
+                <button
+                  type="button"
+                  className={`pm-pill-btn ${paymentMethod === 'Card' ? 'pm-pill-active' : ''}`}
+                  onClick={() => setPaymentMethod('Card')}
+                >
+                  <CreditCard size={14} />
+                  <span>Card POS</span>
+                </button>
+              </div>
+            </div>
+
+            {/* If UPI is selected: Choose UPI Provider App */}
+            {paymentMethod === 'UPI' && (
+              <div className="form-group-compact">
+                <label className="field-label-compact">Customer Payment App</label>
+                <div className="upi-app-strip">
+                  {['Google Pay', 'PhonePe', 'Paytm', 'BHIM / Other'].map((app) => (
+                    <button
+                      key={app}
+                      type="button"
+                      className={`upi-app-chip ${upiApp === app ? 'active-app' : ''}`}
+                      onClick={() => setUpiApp(app)}
+                    >
+                      {app === 'Google Pay' && <span className="gpay-dot">●</span>}
+                      {app}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Amount input */}
             <div className="form-group-compact">
               <label className="field-label-compact">{t('saleAmountQuestion')}</label>
@@ -155,7 +276,7 @@ const AddSale = () => {
               {/* Quick Add Preset Chips */}
               <div className="quick-presets-strip">
                 <span className="presets-label">Quick Add:</span>
-                {[100, 200, 500, 1000, 2000].map((preset) => (
+                {[50, 100, 200, 500, 1000].map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -168,12 +289,71 @@ const AddSale = () => {
               </div>
             </div>
 
+            {/* Dynamic Google Pay / UPI QR Code Card */}
+            {paymentMethod === 'UPI' && (
+              <div className="store-qr-card-compact">
+                <div className="qr-card-left">
+                  <img
+                    src={qrImgSrc}
+                    alt="Scan UPI / GPay QR"
+                    className="store-qr-img"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="qr-card-right">
+                  <div className="badge-gpay-pill">
+                    <span className="gpay-g">G</span>Pay & UPI QR
+                  </div>
+                  <strong className="qr-amount-notice">
+                    {amount && Number(amount) > 0
+                      ? `Scan to pay ₹${Number(amount).toLocaleString('en-IN')}`
+                      : 'Scan to pay any amount'}
+                  </strong>
+                  <p className="qr-vpa-text">VPA: <code>{activeVpa}</code></p>
+                  <span className="qr-helper-tip">
+                    Customer opens Google Pay or any UPI app, scans code & confirms.
+                  </span>
+
+                  <button
+                    type="button"
+                    className="btn-sim-test-inline"
+                    onClick={handleQuickSimulateGPay}
+                    disabled={simulating}
+                  >
+                    <Zap size={13} />
+                    <span>{simulating ? 'Simulating...' : `Simulate ${upiApp} Payment (Instant)`}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* UTR Reference input for UPI */}
+            {paymentMethod === 'UPI' && (
+              <div className="form-group-compact">
+                <label className="field-label-compact">
+                  12-Digit UTR / Transaction Reference (Optional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={20}
+                  placeholder="e.g. 451493008588"
+                  value={utrNumber}
+                  onChange={(e) => setUtrNumber(e.target.value)}
+                  className="sleek-text-input"
+                />
+              </div>
+            )}
+
             {/* Description field */}
             <div className="form-group-compact">
               <label className="field-label-compact">{t('optionalDescription')}</label>
               <input
                 type="text"
-                placeholder="e.g. Retail item purchase, groceries, bill #104"
+                placeholder={
+                  paymentMethod === 'UPI'
+                    ? 'e.g. Counter sale, bill #204, grocery customer'
+                    : 'e.g. Retail item purchase, groceries, bill #104'
+                }
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="sleek-text-input"
@@ -181,9 +361,23 @@ const AddSale = () => {
             </div>
 
             {/* Submit button */}
-            <button type="submit" className="sleek-btn-primary btn-emerald" disabled={loading}>
+            <button
+              type="submit"
+              className={`sleek-btn-primary ${
+                paymentMethod === 'UPI' ? 'btn-gpay-primary' : 'btn-emerald'
+              }`}
+              disabled={loading}
+            >
               <Save size={16} />
-              <span>{loading ? 'Recording...' : 'Record Cash Sale'}</span>
+              <span>
+                {loading
+                  ? 'Recording...'
+                  : paymentMethod === 'UPI'
+                  ? `Record ${upiApp} Sale`
+                  : paymentMethod === 'Card'
+                  ? 'Record Card Sale'
+                  : 'Record Cash Sale'}
+              </span>
             </button>
           </form>
         </div>
@@ -206,22 +400,26 @@ const AddSale = () => {
               </button>
             </div>
 
-            <p className="micro-notice">{t('manualOnlyNotice')}</p>
+            <p className="micro-notice">
+              Payments received via Google Pay, UPI QR, or webhook verify and credit automatically.
+            </p>
 
             <div className="gateway-status-list">
-              {/* UPI Channel */}
+              {/* UPI & Google Pay Channel */}
               <div className="gateway-row-compact">
                 <div className="flex-align-gap">
                   <div className="gateway-icon-box bg-purple-soft">
-                    <Wallet size={15} className="text-purple" />
+                    <Smartphone size={15} className="text-purple" />
                   </div>
                   <div>
-                    <strong className="gw-title">{t('upiStatus')}</strong>
-                    <span className="gw-desc">QR & Virtual Payment Address</span>
+                    <strong className="gw-title">Google Pay / UPI</strong>
+                    <span className="gw-desc">
+                      {connectionStatus.merchantVpa || 'Active & Ready for Inflow'}
+                    </span>
                   </div>
                 </div>
-                <span className={`status-micro-pill ${connectionStatus.upiConnected ? 'pill-profit' : 'pill-standby'}`}>
-                  {connectionStatus.upiConnected ? '● Active' : '○ Standby'}
+                <span className="status-micro-pill pill-profit">
+                  ● Active
                 </span>
               </div>
 
@@ -233,7 +431,7 @@ const AddSale = () => {
                   </div>
                   <div>
                     <strong className="gw-title">{t('cardStatus')}</strong>
-                    <span className="gw-desc">POS Terminal & Online Gateways</span>
+                    <span className="gw-desc">POS Terminal & Gateways</span>
                   </div>
                 </div>
                 <span className={`status-micro-pill ${connectionStatus.cardConnected ? 'pill-profit' : 'pill-standby'}`}>
@@ -256,16 +454,21 @@ const AddSale = () => {
             {autoPayments.length === 0 ? (
               <div className="empty-sub-state">
                 <p>{t('noAutomaticPayments')}</p>
-                <span className="micro-hint">Connected webhook deposits appear automatically here.</span>
+                <span className="micro-hint">Connected Google Pay & UPI deposits appear automatically here.</span>
               </div>
             ) : (
               <div className="micro-tx-list">
-                {autoPayments.slice(0, 4).map((tx) => (
+                {autoPayments.slice(0, 5).map((tx) => (
                   <div key={tx._id} className="micro-tx-row">
                     <div className="micro-tx-left">
                       <span className="micro-date">{formatTime(tx.createdAt)}</span>
                       <strong className="micro-code">
-                        TXN•••{tx.providerTransactionId ? tx.providerTransactionId.slice(-6) : 'AUTO'}
+                        {tx.upiApp || tx.provider || 'UPI'} •••
+                        {tx.utrNumber
+                          ? tx.utrNumber.slice(-4)
+                          : tx.providerTransactionId
+                          ? tx.providerTransactionId.slice(-4)
+                          : 'OK'}
                       </strong>
                       <span className="micro-tag-method">{tx.paymentMethod}</span>
                     </div>

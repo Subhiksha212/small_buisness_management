@@ -1,38 +1,32 @@
 import Sale from '../models/Sale.js';
 
-// Add a new manual Cash sale for authenticated user
+// Add a new sale for authenticated user (Cash, UPI / Google Pay, or Card)
 export const addSale = async (req, res) => {
   try {
-    const { amount, paymentMethod, description, entryMethod } = req.body;
-
-    if (entryMethod === 'automatic') {
-      return res.status(403).json({
-        message: 'Untrusted action: Only authorized payment gateway webhooks can create automatic transactions.',
-      });
-    }
-
-    if (paymentMethod && paymentMethod !== 'Cash') {
-      return res.status(400).json({
-        message: 'UPI and Card payments cannot be entered manually. They are automatically recorded upon provider verification.',
-      });
-    }
+    const { amount, paymentMethod = 'Cash', description, entryMethod = 'manual', upiApp = 'Google Pay', utrNumber = '' } = req.body;
 
     if (!amount || Number(amount) <= 0) {
       return res.status(400).json({ message: 'Please enter an amount greater than 0.' });
     }
 
+    const validMethods = ['Cash', 'UPI', 'Card'];
+    const chosenMethod = validMethods.includes(paymentMethod) ? paymentMethod : 'Cash';
+
     const sale = await Sale.create({
       userId: req.user._id,
       amount: Number(amount),
-      paymentMethod: 'Cash',
-      description: description || '',
-      entryMethod: 'manual',
-      paymentStatus: 'recorded',
-      provider: 'Manual',
+      paymentMethod: chosenMethod,
+      upiApp: chosenMethod === 'UPI' ? upiApp : '',
+      utrNumber: utrNumber ? utrNumber.trim() : '',
+      description: description || (chosenMethod === 'UPI' ? `${upiApp} Customer Payment` : 'Retail Sale'),
+      entryMethod: entryMethod === 'scanned' ? 'scanned' : entryMethod === 'automatic' ? 'automatic' : 'manual',
+      paymentStatus: 'success',
+      provider: chosenMethod === 'UPI' ? upiApp : chosenMethod === 'Card' ? 'Card POS' : 'Manual',
+      providerTransactionId: utrNumber ? utrNumber.trim() : (chosenMethod === 'UPI' ? `UPI_${Date.now()}` : undefined),
     });
 
     res.status(201).json({
-      message: 'Cash sale added successfully.',
+      message: `${chosenMethod} sale recorded successfully.`,
       sale,
     });
   } catch (error) {

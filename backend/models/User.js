@@ -45,6 +45,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    merchantVpa: {
+      type: String,
+      default: '',
+    },
+    upiProvider: {
+      type: String,
+      default: 'Google Pay',
+    },
+    cardProvider: {
+      type: String,
+      default: 'Razorpay',
+    },
   },
   {
     timestamps: true,
