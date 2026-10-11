@@ -33,7 +33,12 @@ export const getDashboardData = async (req, res) => {
     const expenses = await Expense.find(dateFilter);
 
     // Filter Rule: Only include finalized/verified sales for user in financial calculations
-    const validSales = allSales.filter((s) => s.paymentStatus === 'success' || s.paymentStatus === 'recorded');
+    // Strictly exclude pending_verification, failed, and refunded payments
+    const validSales = allSales.filter((s) => {
+      if (s.verificationStatus === 'pending_verification') return false;
+      if (s.paymentStatus === 'pending' || s.paymentStatus === 'failed' || s.paymentStatus === 'refunded') return false;
+      return s.paymentStatus === 'success' || s.paymentStatus === 'recorded';
+    });
 
     // Total calculations
     const totalSales = validSales.reduce((acc, curr) => acc + (curr.amount || 0), 0);
@@ -41,10 +46,21 @@ export const getDashboardData = async (req, res) => {
     const netProfit = totalSales - totalExpenses;
     const currentBalance = netProfit;
 
-    // Payment method breakdown for Sales
+    // Payment method breakdown for Sales (Cash, GPay, PhonePe, Other UPI, Card)
     const salesByPaymentMethod = {
       cash: validSales.filter((s) => s.paymentMethod === 'Cash').reduce((acc, curr) => acc + curr.amount, 0),
-      upi: validSales.filter((s) => s.paymentMethod === 'UPI').reduce((acc, curr) => acc + curr.amount, 0),
+      gpay: validSales
+        .filter((s) => s.paymentMethod === 'GPay' || (s.paymentMethod === 'UPI' && s.upiApp?.toLowerCase().includes('google')))
+        .reduce((acc, curr) => acc + curr.amount, 0),
+      phonepe: validSales
+        .filter((s) => s.paymentMethod === 'PhonePe' || (s.paymentMethod === 'UPI' && s.upiApp?.toLowerCase().includes('phonepe')))
+        .reduce((acc, curr) => acc + curr.amount, 0),
+      otherUpi: validSales
+        .filter((s) => s.paymentMethod === 'Other UPI' || (s.paymentMethod === 'UPI' && !s.upiApp?.toLowerCase().includes('google') && !s.upiApp?.toLowerCase().includes('phonepe')))
+        .reduce((acc, curr) => acc + curr.amount, 0),
+      upi: validSales
+        .filter((s) => ['GPay', 'PhonePe', 'Other UPI', 'UPI'].includes(s.paymentMethod))
+        .reduce((acc, curr) => acc + curr.amount, 0),
       card: validSales.filter((s) => s.paymentMethod === 'Card').reduce((acc, curr) => acc + curr.amount, 0),
     };
 
@@ -65,6 +81,7 @@ export const getDashboardData = async (req, res) => {
       detail: s.description || (s.entryMethod === 'automatic' ? `${s.provider || 'UPI'} Payment` : 'Shop Sale'),
       category: s.paymentMethod,
       paymentMethod: s.paymentMethod,
+      verificationStatus: s.verificationStatus || (s.entryMethod === 'automatic' ? 'verified' : 'manual_entry'),
       upiApp: s.upiApp || s.provider,
       utrNumber: s.utrNumber,
       provider: s.provider,
@@ -78,8 +95,9 @@ export const getDashboardData = async (req, res) => {
     const formattedExpenses = expenses.map((e) => ({
       id: e._id,
       type: 'Expense',
-      detail: e.description || e.category,
+      detail: e.description || (e.paidTo ? `Paid to ${e.paidTo}` : e.category),
       category: e.category,
+      paidTo: e.paidTo,
       paymentMethod: e.paymentMethod || 'Cash',
       upiApp: e.upiApp || e.provider,
       utrNumber: e.utrNumber,

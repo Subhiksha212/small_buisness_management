@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import {
@@ -6,7 +6,12 @@ import {
   getPaymentStatus,
   getAutomaticPayments,
   simulateTestPayment,
+  createRazorpayOrder,
+  verifyRazorpayOrder,
+  syncGatewayPayments,
+  checkLivePayment,
 } from '../services/api';
+import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
   CheckCircle,
   AlertCircle,
@@ -23,6 +28,11 @@ import {
   Smartphone,
   Banknote,
   Zap,
+  RefreshCw,
+  Radio,
+  ExternalLink,
+  CheckCircle2,
+  Lock,
 } from 'lucide-react';
 
 const AddSale = () => {
@@ -31,29 +41,34 @@ const AddSale = () => {
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('UPI'); // Default to UPI / GPay as requested
+  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash' | 'UPI' | 'Card'
   const [upiApp, setUpiApp] = useState('Google Pay');
   const [utrNumber, setUtrNumber] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [syncingGateway, setSyncingGateway] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState('');
+
+  // Real-time payment detection states
+  const [isProcessingRazorpay, setIsProcessingRazorpay] = useState(false);
+  const [capturedPayment, setCapturedPayment] = useState(null); // { amount, provider, utrNumber, paymentId }
+  const listeningStartRef = useRef(Date.now());
+
+  const upiAppOptions = ['Google Pay', 'PhonePe', 'Paytm', 'BHIM', 'Other UPI'];
 
   // Connection & Automatic payments state
   const [connectionStatus, setConnectionStatus] = useState({
     upiConnected: false,
     cardConnected: false,
-    providerName: 'Google Pay',
+    providerName: 'UPI',
     merchantVpa: '',
-    upiProvider: 'Google Pay',
+    upiProvider: 'UPI',
   });
   const [autoPayments, setAutoPayments] = useState([]);
 
-  useEffect(() => {
-    fetchPaymentData();
-  }, []);
-
-  const fetchPaymentData = async () => {
+  const fetchPaymentData = useCallback(async () => {
     try {
       const [statusData, autoTxData] = await Promise.all([
         getPaymentStatus(),
@@ -64,13 +79,193 @@ const AddSale = () => {
     } catch (err) {
       console.error('Error loading payment provider info:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchPaymentData();
+  }, [fetchPaymentData]);
+
+  // Reset listening timestamp when amount or payment method changes
+  useEffect(() => {
+    listeningStartRef.current = Date.now();
+    setCapturedPayment(null);
+  }, [amount, paymentMethod]);
+
+  // Real-Time Event Subscription (SSE)
+  useRealtimeEvents({
+    onPaymentSuccess: (eventData) => {
+      console.log('[REAL-TIME] Payment received on AddSale:', eventData);
+      const incomingAmount = Number(eventData.amount);
+      const currentExpected = Number(amount);
+
+      // If waiting for payment, or if amount matches / is close
+      if (
+        (paymentMethod === 'UPI' || paymentMethod === 'Card') &&
+        (!currentExpected || Math.abs(incomingAmount - currentExpected) < 0.01)
+      ) {
+        setCapturedPayment({
+          amount: incomingAmount,
+          provider: eventData.provider || 'UPI',
+          paymentMethod: eventData.paymentMethod || 'UPI',
+          utrNumber: eventData.utrNumber || eventData.providerPaymentId,
+          paymentId: eventData.providerPaymentId,
+        });
+        setSuccess(`Payment of ₹${incomingAmount} received via ${eventData.provider || 'UPI'}!`);
+        fetchPaymentData();
+      }
+    },
+    onSaleCreated: () => {
+      fetchPaymentData();
+    },
+  });
+
+  // Fallback Polling (Checks every 3.5 seconds if customer paid while showing QR)
+  useEffect(() => {
+    const isListening = (paymentMethod === 'UPI' || paymentMethod === 'Card') && Number(amount) > 0 && !capturedPayment;
+    if (!isListening) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await checkLivePayment({
+          amount: Number(amount),
+          since: listeningStartRef.current,
+        });
+
+        if (res.found && res.payment) {
+          console.log('[LIVE POLL] Captured live payment:', res.payment);
+          setCapturedPayment({
+            amount: res.payment.amount,
+            provider: res.payment.provider,
+            paymentMethod: res.payment.paymentMethod,
+            utrNumber: res.payment.utrNumber,
+            paymentId: res.payment.id,
+          });
+          setSuccess(`Payment of ₹${res.payment.amount} detected in real-time via ${res.payment.provider}!`);
+          fetchPaymentData();
+        }
+      } catch (err) {
+        // Suppress poll errors
+      }
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [amount, paymentMethod, capturedPayment, fetchPaymentData]);
 
   const handleQuickAdd = (preset) => {
     const current = Number(amount) || 0;
     setAmount((current + preset).toString());
   };
 
+  // Launch official Razorpay Checkout modal
+  const handlePayWithRazorpay = async () => {
+    const orderAmount = Number(amount);
+    if (!orderAmount || orderAmount <= 0) {
+      setError('Please enter a valid sale amount first.');
+      return;
+    }
+
+    if (!window.Razorpay) {
+      setError('Razorpay SDK is loading. Please check your internet connection.');
+      return;
+    }
+
+    setError('');
+    setIsProcessingRazorpay(true);
+
+    try {
+      // 1. Create order on server
+      const orderRes = await createRazorpayOrder({
+        amount: orderAmount,
+        notes: {
+          description: description || 'Counter Retail Sale',
+        },
+      });
+
+      const orderData = orderRes.order;
+
+      // 2. Open Razorpay Checkout modal
+      const options = {
+        key: orderData.key,
+        amount: Math.round(orderAmount * 100),
+        currency: orderData.currency || 'INR',
+        name: 'Smart Business Shop',
+        description: description || 'Counter Sale Bill',
+        order_id: orderData.orderId,
+        theme: {
+          color: '#10b981',
+        },
+        handler: async (response) => {
+          try {
+            setLoading(true);
+            const verifyRes = await verifyRazorpayOrder({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              amount: orderAmount,
+              description: description || `Razorpay counter payment [${response.razorpay_payment_id}]`,
+            });
+
+            setCapturedPayment({
+              amount: orderAmount,
+              provider: 'Razorpay',
+              paymentMethod: verifyRes.method || 'UPI',
+              utrNumber: response.razorpay_payment_id,
+              paymentId: response.razorpay_payment_id,
+            });
+
+            setSuccess(`Payment of ₹${orderAmount} verified live via Razorpay! Sale registered.`);
+            setAmount('');
+            setDescription('');
+            setUtrNumber('');
+            await fetchPaymentData();
+
+            setTimeout(() => {
+              navigate('/transactions');
+            }, 1500);
+          } catch (verErr) {
+            setError('Payment verification failed: ' + (verErr.response?.data?.message || verErr.message));
+          } finally {
+            setLoading(false);
+            setIsProcessingRazorpay(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessingRazorpay(false);
+          },
+        },
+        prefill: {
+          name: 'Walk-in Customer',
+          email: 'customer@store.com',
+          contact: '9876543210',
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to start Razorpay payment.');
+      setIsProcessingRazorpay(false);
+    }
+  };
+
+  // Trigger manual gateway sync from Razorpay API
+  const handleSyncGateway = async () => {
+    try {
+      setSyncingGateway(true);
+      setSyncFeedback('');
+      const res = await syncGatewayPayments();
+      setSyncFeedback(res.message);
+      await fetchPaymentData();
+      setTimeout(() => setSyncFeedback(''), 4500);
+    } catch (err) {
+      setSyncFeedback('Gateway sync failed: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSyncingGateway(false);
+    }
+  };
+
+  // Manual save sale (for cash or manual entry)
   const handleSaveSale = async (e) => {
     e.preventDefault();
     setError('');
@@ -113,7 +308,7 @@ const AddSale = () => {
 
       setTimeout(() => {
         navigate('/transactions');
-      }, 1200);
+      }, 1000);
     } catch (err) {
       setError(err.response?.data?.message || 'Something went wrong. Please try again.');
     } finally {
@@ -122,7 +317,7 @@ const AddSale = () => {
   };
 
   // Quick simulation helper
-  const handleQuickSimulateGPay = async () => {
+  const handleQuickSimulate = async () => {
     const simAmount = Number(amount) > 0 ? Number(amount) : 500;
     setError('');
     setSuccess('');
@@ -133,7 +328,7 @@ const AddSale = () => {
         provider: upiApp,
         direction: 'received',
         upiApp: upiApp,
-        note: `Customer scanned GPay QR and paid ₹${simAmount}`,
+        note: `Customer paid ₹${simAmount} via ${upiApp}`,
       });
       setSuccess(res.message || `₹${simAmount} received via ${upiApp}! Sale registered.`);
       await fetchPaymentData();
@@ -151,7 +346,7 @@ const AddSale = () => {
     return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Dynamic QR Code generation for UPI/GPay
+  // Dynamic QR Code generation for UPI
   const activeVpa = connectionStatus.merchantVpa || 'merchant@okaxis';
   const qrUpiUrl = `upi://pay?pa=${encodeURIComponent(activeVpa)}&pn=${encodeURIComponent(
     'Smart Shop'
@@ -165,9 +360,9 @@ const AddSale = () => {
       {/* Page Title & Breadcrumb */}
       <div className="page-intro-bar">
         <div>
-          <h2 className="section-title">Sales Management</h2>
+          <h2 className="section-title">Sales & Real-Time Payment Ingestion</h2>
           <p className="section-subtitle">
-            Accept Google Pay, UPI QR codes, Cash & Card payments with instant ledger updates
+            Accept Cash, UPI (Google Pay, PhonePe, Paytm, BHIM) and Razorpay with automated real-time payment fetching
           </p>
         </div>
       </div>
@@ -182,12 +377,10 @@ const AddSale = () => {
               </span>
               <div>
                 <h3 className="panel-heading">Record Customer Sale</h3>
-                <span className="panel-subheading">Cash or Google Pay / UPI counter payment</span>
+                <span className="panel-subheading">Counter bill entry & digital payments</span>
               </div>
             </div>
-            <span className="pill-active-mode">
-              {paymentMethod === 'UPI' ? '● GPay / UPI Ready' : 'Direct Entry'}
-            </span>
+            <span className="pill-active-mode">Direct Entry</span>
           </div>
 
           {error && (
@@ -204,19 +397,47 @@ const AddSale = () => {
             </div>
           )}
 
+          {/* CAPTURED LIVE PAYMENT CELEBRATION CARD */}
+          {capturedPayment && (
+            <div
+              style={{
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                border: '2px solid #10b981',
+                borderRadius: '12px',
+                padding: '14px',
+                marginBottom: '16px',
+                animation: 'pulse 1.5s infinite alternate',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle2 size={22} color="#10b981" />
+                  <div>
+                    <strong style={{ color: '#065f46', fontSize: '14px' }}>
+                      Payment Captured in Real-Time!
+                    </strong>
+                    <div style={{ fontSize: '12px', color: '#047857' }}>
+                      ₹{capturedPayment.amount} received via {capturedPayment.provider}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/transactions')}
+                  className="sleek-btn-primary btn-emerald"
+                  style={{ padding: '6px 12px', fontSize: '11px' }}
+                >
+                  View in Ledger
+                </button>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSaveSale} className="compact-form">
             {/* Payment Method Selector Tabs */}
             <div className="form-group-compact">
               <label className="field-label-compact">{t('paymentMethodLabel') || 'Payment Method'}</label>
               <div className="payment-method-selector-compact">
-                <button
-                  type="button"
-                  className={`pm-pill-btn ${paymentMethod === 'UPI' ? 'pm-pill-active' : ''}`}
-                  onClick={() => setPaymentMethod('UPI')}
-                >
-                  <Smartphone size={14} />
-                  <span>Google Pay / UPI</span>
-                </button>
                 <button
                   type="button"
                   className={`pm-pill-btn ${paymentMethod === 'Cash' ? 'pm-pill-active' : ''}`}
@@ -227,28 +448,35 @@ const AddSale = () => {
                 </button>
                 <button
                   type="button"
+                  className={`pm-pill-btn ${paymentMethod === 'UPI' ? 'pm-pill-active' : ''}`}
+                  onClick={() => setPaymentMethod('UPI')}
+                >
+                  <Smartphone size={14} />
+                  <span>UPI & QR</span>
+                </button>
+                <button
+                  type="button"
                   className={`pm-pill-btn ${paymentMethod === 'Card' ? 'pm-pill-active' : ''}`}
                   onClick={() => setPaymentMethod('Card')}
                 >
                   <CreditCard size={14} />
-                  <span>Card POS</span>
+                  <span>Card / Razorpay</span>
                 </button>
               </div>
             </div>
 
-            {/* If UPI is selected: Choose UPI Provider App */}
+            {/* If UPI is selected: Choose UPI Provider App equally */}
             {paymentMethod === 'UPI' && (
               <div className="form-group-compact">
                 <label className="field-label-compact">Customer Payment App</label>
                 <div className="upi-app-strip">
-                  {['Google Pay', 'PhonePe', 'Paytm', 'BHIM / Other'].map((app) => (
+                  {upiAppOptions.map((app) => (
                     <button
                       key={app}
                       type="button"
                       className={`upi-app-chip ${upiApp === app ? 'active-app' : ''}`}
                       onClick={() => setUpiApp(app)}
                     >
-                      {app === 'Google Pay' && <span className="gpay-dot">●</span>}
                       {app}
                     </button>
                   ))}
@@ -289,41 +517,135 @@ const AddSale = () => {
               </div>
             </div>
 
-            {/* Dynamic Google Pay / UPI QR Code Card */}
+            {/* Dynamic UPI QR Code Card + Real-time Ingestion Radar */}
             {paymentMethod === 'UPI' && (
               <div className="store-qr-card-compact">
                 <div className="qr-card-left">
                   <img
                     src={qrImgSrc}
-                    alt="Scan UPI / GPay QR"
+                    alt="Scan UPI QR"
                     className="store-qr-img"
                     loading="lazy"
                   />
                 </div>
                 <div className="qr-card-right">
-                  <div className="badge-gpay-pill">
-                    <span className="gpay-g">G</span>Pay & UPI QR
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div className="badge-gpay-pill">
+                      <QrCode size={13} className="text-cyan" />
+                      <span>Live UPI QR</span>
+                    </div>
+                    {/* Live Listening Radar Badge */}
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        color: '#059669',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: '#10b981',
+                          boxShadow: '0 0 6px #10b981',
+                        }}
+                      />
+                      Live Ingestion Active
+                    </span>
                   </div>
+
                   <strong className="qr-amount-notice">
                     {amount && Number(amount) > 0
                       ? `Scan to pay ₹${Number(amount).toLocaleString('en-IN')}`
-                      : 'Scan to pay any amount'}
+                      : 'Scan to pay counter bill'}
                   </strong>
-                  <p className="qr-vpa-text">VPA: <code>{activeVpa}</code></p>
+                  <p className="qr-vpa-text">UPI ID: <code>{activeVpa}</code></p>
                   <span className="qr-helper-tip">
-                    Customer opens Google Pay or any UPI app, scans code & confirms.
+                    Customer scans with Google Pay, PhonePe, Paytm, or BHIM.
                   </span>
 
-                  <button
-                    type="button"
-                    className="btn-sim-test-inline"
-                    onClick={handleQuickSimulateGPay}
-                    disabled={simulating}
-                  >
-                    <Zap size={13} />
-                    <span>{simulating ? 'Simulating...' : `Simulate ${upiApp} Payment (Instant)`}</span>
-                  </button>
+                  {/* Dual Action Buttons: Pay via Razorpay Checkout & Quick Simulator */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handlePayWithRazorpay}
+                      disabled={isProcessingRazorpay || !amount || Number(amount) <= 0}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        backgroundColor: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(2, 132, 199, 0.2)',
+                      }}
+                    >
+                      <CreditCard size={14} />
+                      <span>
+                        {isProcessingRazorpay
+                          ? 'Opening Gateway...'
+                          : `Pay with Razorpay (UPI / Card / NetBanking)`}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-sim-test-inline"
+                      onClick={handleQuickSimulate}
+                      disabled={simulating}
+                    >
+                      <Zap size={13} />
+                      <span>{simulating ? 'Simulating...' : `⚡ Test: Simulate Incoming ${upiApp} Payment`}</span>
+                    </button>
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* If Card POS is selected: Direct Razorpay Checkout Option */}
+            {paymentMethod === 'Card' && (
+              <div
+                style={{
+                  backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  marginBottom: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <CreditCard size={18} className="text-blue" />
+                  <strong style={{ fontSize: '13px' }}>Card POS & Payment Gateway</strong>
+                </div>
+                <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 10px 0' }}>
+                  Collect instant Card, NetBanking, and Wallet payments via Razorpay Gateway with cryptographic signature verification.
+                </p>
+                <button
+                  type="button"
+                  onClick={handlePayWithRazorpay}
+                  disabled={isProcessingRazorpay || !amount || Number(amount) <= 0}
+                  className="sleek-btn-primary btn-cyan"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  <CreditCard size={15} />
+                  <span>
+                    {isProcessingRazorpay ? 'Processing...' : `Pay ₹${amount || '0'} via Razorpay Gateway`}
+                  </span>
+                </button>
               </div>
             )}
 
@@ -351,7 +673,7 @@ const AddSale = () => {
                 type="text"
                 placeholder={
                   paymentMethod === 'UPI'
-                    ? 'e.g. Counter sale, bill #204, grocery customer'
+                    ? `e.g. Counter sale paid via ${upiApp}`
                     : 'e.g. Retail item purchase, groceries, bill #104'
                 }
                 value={description}
@@ -363,9 +685,7 @@ const AddSale = () => {
             {/* Submit button */}
             <button
               type="submit"
-              className={`sleek-btn-primary ${
-                paymentMethod === 'UPI' ? 'btn-gpay-primary' : 'btn-emerald'
-              }`}
+              className="sleek-btn-primary btn-emerald"
               disabled={loading}
             >
               <Save size={16} />
@@ -382,60 +702,70 @@ const AddSale = () => {
           </form>
         </div>
 
-        {/* RIGHT COLUMN: CHANNELS & AUTOMATIC PAYMENTS */}
+        {/* RIGHT COLUMN: CHANNELS & REAL-TIME FETCHING FEED */}
         <div className="side-column-panels">
-          {/* Connected Gateway Status */}
+          {/* Gateway Real-Time Sync Panel */}
           <div className="sleek-panel side-channel-panel">
             <div className="panel-header-compact">
               <div className="flex-align-gap">
                 <ShieldCheck size={16} className="text-cyan" />
-                <h3 className="panel-heading">{t('connectedPayments')}</h3>
+                <h3 className="panel-heading">Real-Time Gateway Fetching</h3>
               </div>
               <button
                 type="button"
                 className="link-settings-mini"
-                onClick={() => navigate('/settings')}
+                onClick={handleSyncGateway}
+                disabled={syncingGateway}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
-                Configure
+                <RefreshCw size={12} className={syncingGateway ? 'spin' : ''} />
+                <span>{syncingGateway ? 'Fetching...' : 'Fetch Now'}</span>
               </button>
             </div>
 
             <p className="micro-notice">
-              Payments received via Google Pay, UPI QR, or webhook verify and credit automatically.
+              Connects directly to Razorpay REST API to fetch captured customer payments in real-time. Background synchronization runs every 15s.
             </p>
 
+            {syncFeedback && (
+              <div className="alert-compact alert-success mb-10">
+                <CheckCircle size={14} />
+                <span>{syncFeedback}</span>
+              </div>
+            )}
+
             <div className="gateway-status-list">
-              {/* UPI & Google Pay Channel */}
+              {/* UPI Channel */}
               <div className="gateway-row-compact">
                 <div className="flex-align-gap">
                   <div className="gateway-icon-box bg-purple-soft">
                     <Smartphone size={15} className="text-purple" />
                   </div>
                   <div>
-                    <strong className="gw-title">Google Pay / UPI</strong>
+                    <strong className="gw-title">UPI (GPay / PhonePe / Paytm)</strong>
                     <span className="gw-desc">
-                      {connectionStatus.merchantVpa || 'Active & Ready for Inflow'}
+                      {connectionStatus.merchantVpa || 'QR & Virtual Payment Address'}
                     </span>
                   </div>
                 </div>
                 <span className="status-micro-pill pill-profit">
-                  ● Active
+                  ● Live Active
                 </span>
               </div>
 
-              {/* Card Channel */}
+              {/* Razorpay Gateway Channel */}
               <div className="gateway-row-compact">
                 <div className="flex-align-gap">
                   <div className="gateway-icon-box bg-blue-soft">
                     <CreditCard size={15} className="text-blue" />
                   </div>
                   <div>
-                    <strong className="gw-title">{t('cardStatus')}</strong>
-                    <span className="gw-desc">POS Terminal & Gateways</span>
+                    <strong className="gw-title">Razorpay API Ingestion</strong>
+                    <span className="gw-desc">Direct REST Fetching & Webhooks</span>
                   </div>
                 </div>
-                <span className={`status-micro-pill ${connectionStatus.cardConnected ? 'pill-profit' : 'pill-standby'}`}>
-                  {connectionStatus.cardConnected ? '● Active' : '○ Standby'}
+                <span className="status-micro-pill pill-profit">
+                  ● Connected
                 </span>
               </div>
             </div>
@@ -454,7 +784,7 @@ const AddSale = () => {
             {autoPayments.length === 0 ? (
               <div className="empty-sub-state">
                 <p>{t('noAutomaticPayments')}</p>
-                <span className="micro-hint">Connected Google Pay & UPI deposits appear automatically here.</span>
+                <span className="micro-hint">Connected UPI deposits appear automatically here.</span>
               </div>
             ) : (
               <div className="micro-tx-list">

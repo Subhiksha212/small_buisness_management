@@ -1,36 +1,39 @@
-import crypto from 'crypto';
+import { verifyAndParseWebhook } from '../services/paymentProviders/index.js';
 
+/**
+ * Strict Webhook Signature Verification Middleware
+ * Validates cryptographic signatures for Razorpay, Cashfree, Paytm, and Sandbox.
+ * STRICTLY NO DEV BYPASS: Requests without a valid signature are rejected with 4xx.
+ */
 export const verifyWebhookSignature = (req, res, next) => {
   try {
-    const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+    const body = req.body || {};
+    const headers = req.headers || {};
+    const queryProvider = req.params?.provider || req.query?.provider;
 
-    // Check for developer/sandbox test header override
-    const sandboxSecret = req.headers['x-sandbox-secret'];
+    const result = verifyAndParseWebhook({
+      rawBody,
+      body,
+      headers,
+      queryProvider,
+    });
 
-    if (!webhookSecret && !sandboxSecret) {
-      console.warn('Payment Webhook Warning: PAYMENT_WEBHOOK_SECRET is not configured in .env');
-      return res.status(401).json({ message: 'Payment gateway webhook secret is not configured.' });
+    if (!result.verified) {
+      console.warn(`[SECURITY] Rejected Webhook: ${result.reason} (HTTP ${result.statusCode})`);
+      return res.status(result.statusCode || 401).json({
+        error: 'SignatureVerificationFailed',
+        message: result.reason,
+      });
     }
 
-    const signature = req.headers['x-webhook-signature'] || req.headers['x-razorpay-signature'];
-
-    if (!signature && !sandboxSecret) {
-      return res.status(401).json({ message: 'Missing payment webhook signature header.' });
-    }
-
-    // Standard HMAC SHA256 signature verification
-    if (webhookSecret && signature) {
-      const hmac = crypto.createHmac('sha256', webhookSecret);
-      const expectedSignature = hmac.update(JSON.stringify(req.body)).digest('hex');
-
-      if (signature !== expectedSignature && sandboxSecret !== webhookSecret) {
-        return res.status(401).json({ message: 'Invalid payment webhook signature verification.' });
-      }
-    }
+    // Attach verified and normalized data to request
+    req.verifiedPaymentData = result.parsedData;
+    req.paymentProvider = result.provider;
 
     next();
   } catch (error) {
-    console.error('Error verifying webhook signature:', error);
-    res.status(500).json({ message: 'Webhook verification error.' });
+    console.error('Error during webhook signature verification:', error.message);
+    res.status(500).json({ error: 'WebhookVerificationError', message: 'Internal verification failure.' });
   }
 };

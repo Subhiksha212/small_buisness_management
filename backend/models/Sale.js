@@ -16,8 +16,23 @@ const saleSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       required: [true, 'Please select payment method'],
-      enum: ['Cash', 'UPI', 'Card'],
+      enum: ['Cash', 'GPay', 'PhonePe', 'Other UPI', 'UPI', 'Card'],
       default: 'Cash',
+    },
+    verificationStatus: {
+      type: String,
+      enum: ['verified', 'pending_verification', 'manual_entry'],
+      default: 'manual_entry',
+      index: true,
+    },
+    saleDate: {
+      type: Date,
+      default: Date.now,
+    },
+    referenceNumber: {
+      type: String,
+      trim: true,
+      default: '',
     },
     description: {
       type: String,
@@ -47,9 +62,29 @@ const saleSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      index: true,
+    },
+    currency: {
+      type: String,
+      default: 'INR',
+    },
+    isTest: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    providerOrderId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     providerTransactionId: {
       type: String,
       sparse: true,
+      index: true,
     },
   },
   {

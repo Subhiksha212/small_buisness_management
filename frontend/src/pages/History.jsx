@@ -1,6 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { getSales, getExpenses, deleteSale, deleteExpense } from '../services/api';
+import {
+  getSales,
+  getExpenses,
+  deleteSale,
+  deleteExpense,
+} from '../services/api';
+import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
   Trash2,
   Filter,
@@ -21,18 +27,16 @@ const Transactions = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+
+
   // Filters
   const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Sales', 'Expenses'
   const [entryFilter, setEntryFilter] = useState('All'); // 'All', 'Manual', 'Automatic', 'Scanned'
   const [timeFilter, setTimeFilter] = useState('All Time'); // 'Today', 'This Week', 'This Month', 'This Year', 'All Time'
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const [salesData, expensesData] = await Promise.all([getSales(), getExpenses()]);
 
       const formattedSales = salesData.map((s) => ({
@@ -46,6 +50,7 @@ const Transactions = () => {
         entryMethod: s.entryMethod || 'manual',
         paymentStatus: s.paymentStatus || 'recorded',
         amount: s.amount,
+        isTest: Boolean(s.isTest),
         createdAt: s.createdAt,
       }));
 
@@ -54,12 +59,15 @@ const Transactions = () => {
         rawId: e._id,
         type: 'Expense',
         detail: e.description || e.category,
+        paidTo: e.paidTo,
+        category: e.category,
         paymentMethod: e.paymentMethod || 'Cash',
         upiApp: e.upiApp || e.provider,
         utrNumber: e.utrNumber,
         entryMethod: e.entryMethod || 'manual',
         paymentStatus: e.paymentStatus || 'recorded',
         amount: e.amount,
+        isTest: Boolean(e.isTest),
         createdAt: e.createdAt,
       }));
 
@@ -71,9 +79,22 @@ const Transactions = () => {
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  };
+  }, []);
+
+  // Real-Time Event Subscription (No polling!)
+  const { isConnected } = useRealtimeEvents({
+    onPaymentSuccess: () => fetchData(false),
+    onSaleCreated: () => fetchData(false),
+    onExpenseCreated: () => fetchData(false),
+    onTransactionCreated: () => fetchData(false),
+    onReconnect: () => fetchData(false),
+  });
+
+  useEffect(() => {
+    fetchData(true);
+  }, [fetchData]);
 
   const handleDelete = async (tx) => {
     if (!window.confirm('Are you sure you want to delete this record?')) return;
@@ -90,6 +111,8 @@ const Transactions = () => {
     }
   };
 
+
+
   // Filter Logic
   const filteredTransactions = transactions.filter((tx) => {
     if (typeFilter === 'Sales' && tx.type !== 'Sale') return false;
@@ -102,9 +125,11 @@ const Transactions = () => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchDetail = tx.detail?.toLowerCase().includes(q);
+      const matchPayee = tx.paidTo?.toLowerCase().includes(q);
       const matchMethod = tx.paymentMethod?.toLowerCase().includes(q);
+      const matchApp = tx.upiApp?.toLowerCase().includes(q);
       const matchAmount = tx.amount?.toString().includes(q);
-      if (!matchDetail && !matchMethod && !matchAmount) return false;
+      if (!matchDetail && !matchPayee && !matchMethod && !matchApp && !matchAmount) return false;
     }
 
     const txDate = new Date(tx.createdAt);
@@ -128,13 +153,6 @@ const Transactions = () => {
     return true;
   });
 
-  // Calculate totals for filtered transactions
-  const totalFilteredSales = filteredTransactions
-    .filter((t) => t.type === 'Sale')
-    .reduce((sum, t) => sum + (t.amount || 0), 0);
-  const totalFilteredExpenses = filteredTransactions
-    .filter((t) => t.type === 'Expense')
-    .reduce((sum, t) => sum + (t.amount || 0), 0);
 
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
@@ -151,21 +169,36 @@ const Transactions = () => {
       {/* Page Title & Breadcrumb */}
       <div className="page-intro-bar">
         <div>
-          <h2 className="section-title">{t('navTransactions')}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 className="section-title">{t('navTransactions')}</h2>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: '600',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: isConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                color: isConnected ? '#059669' : '#64748b',
+                border: `1px solid ${isConnected ? 'rgba(16, 185, 129, 0.25)' : 'rgba(100, 116, 139, 0.25)'}`,
+              }}
+            >
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: isConnected ? '#10b981' : '#94a3b8',
+                }}
+              />
+              {isConnected ? 'Live Sync' : 'Reconnecting...'}
+            </span>
+          </div>
           <p className="section-subtitle">Real-time ledger of retail receipts, operational invoices, and webhooks</p>
         </div>
 
-        {/* Live Filter Totals Badge */}
-        <div className="summary-pill-group">
-          <div className="sum-pill sum-profit">
-            <span>Inflow:</span>
-            <strong>+₹{totalFilteredSales.toLocaleString('en-IN')}</strong>
-          </div>
-          <div className="sum-pill sum-loss">
-            <span>Outflow:</span>
-            <strong>-₹{totalFilteredExpenses.toLocaleString('en-IN')}</strong>
-          </div>
-        </div>
       </div>
 
       {/* COMPACT UNIFIED TOOLBAR */}
@@ -278,6 +311,9 @@ const Transactions = () => {
 
                     <td>
                       <strong className="tx-desc-title">{tx.detail}</strong>
+                      {tx.paidTo ? (
+                        <span className="tx-payee-sub">👤 To: {tx.paidTo}</span>
+                      ) : null}
                     </td>
 
                     <td>
@@ -329,6 +365,8 @@ const Transactions = () => {
           </div>
         )}
       </div>
+
+
     </div>
   );
 };

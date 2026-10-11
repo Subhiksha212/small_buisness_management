@@ -14,6 +14,7 @@ export const translations = {
     navProfitLoss: "Profit & Loss",
     navVoiceHelp: "Voice Help",
     navSettings: "Settings",
+    navUpiApp: "UPI App Simulator",
 
     // Dashboard Cards
     totalSales: "TOTAL SALES",
@@ -161,6 +162,7 @@ export const translations = {
     navProfitLoss: "லாபம் & நஷ்டம்",
     navVoiceHelp: "குரல் உதவி",
     navSettings: "அமைப்புகள்",
+    navUpiApp: "UPI ஆப் சிமுலேட்டர்",
 
     // Dashboard Cards
     totalSales: "மொத்த விற்பனை",

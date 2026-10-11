@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { getDashboardData } from '../services/api';
+import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
   TrendingUp,
   TrendingDown,
@@ -29,11 +30,7 @@ const ProfitLoss = () => {
   // Modal State for breakdowns
   const [activeModal, setActiveModal] = useState(null); // 'sales' | 'expenses' | null
 
-  useEffect(() => {
-    fetchFinancialData();
-  }, [period]);
-
-  const fetchFinancialData = async () => {
+  const fetchFinancialData = useCallback(async () => {
     try {
       setLoading(true);
       const res = await getDashboardData(period);
@@ -43,7 +40,20 @@ const ProfitLoss = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [period]);
+
+  // Real-Time Event Subscription (No polling!)
+  useRealtimeEvents({
+    onPaymentSuccess: () => fetchFinancialData(),
+    onSaleCreated: () => fetchFinancialData(),
+    onExpenseCreated: () => fetchFinancialData(),
+    onTransactionCreated: () => fetchFinancialData(),
+    onReconnect: () => fetchFinancialData(),
+  });
+
+  useEffect(() => {
+    fetchFinancialData();
+  }, [fetchFinancialData]);
 
   const isProfit = data.netProfit >= 0;
 

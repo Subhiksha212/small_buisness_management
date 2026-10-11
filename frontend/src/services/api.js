@@ -79,6 +79,11 @@ export const deleteSale = async (id) => {
   return response.data;
 };
 
+export const verifySale = async (id) => {
+  const response = await api.patch(`/sales/${id}/verify`);
+  return response.data;
+};
+
 export const getExpenses = async () => {
   const response = await api.get('/expenses');
   return response.data;
@@ -117,6 +122,27 @@ export const simulateTestPayment = async (options) => {
 
 export const recordUpiPayment = async (upiData) => {
   const response = await api.post('/payments/record-upi', upiData);
+  return response.data;
+};
+
+// Real-time Gateway & Live Payment Endpoints
+export const createRazorpayOrder = async (orderData) => {
+  const response = await api.post('/payments/create-order', orderData);
+  return response.data;
+};
+
+export const verifyRazorpayOrder = async (paymentData) => {
+  const response = await api.post('/payments/verify-order', paymentData);
+  return response.data;
+};
+
+export const syncGatewayPayments = async () => {
+  const response = await api.get('/payments/sync-gateway');
+  return response.data;
+};
+
+export const checkLivePayment = async (params = {}) => {
+  const response = await api.get('/payments/live-check', { params });
   return response.data;
 };
 

@@ -1,17 +1,33 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Volume2, Mic, Menu, LogOut, Store } from 'lucide-react';
+import { Volume2, Mic, Menu, LogOut, Store, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { syncGatewayPayments } from '../services/api';
 
 const Header = ({ onToggleSidebar, onSpeakPage, onStartVoiceCommand, isListening }) => {
   const { language, setLanguage, t } = useLanguage();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isSyncing, setIsSyncing] = React.useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleSyncPayments = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await syncGatewayPayments();
+      if (res.newlySynced > 0) {
+        alert(`Fetched ${res.newlySynced} new payment(s) from Razorpay!`);
+      }
+    } catch (e) {
+      console.warn('Sync failed:', e);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
@@ -45,6 +61,18 @@ const Header = ({ onToggleSidebar, onSpeakPage, onStartVoiceCommand, isListening
             தமிழ்
           </button>
         </div>
+
+        {/* Real-time Gateway Sync Button */}
+        <button
+          className="glass-header-btn"
+          onClick={handleSyncPayments}
+          disabled={isSyncing}
+          title="Fetch latest payments directly from Razorpay"
+          style={{ gap: '6px' }}
+        >
+          <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
+          <span>{isSyncing ? 'Fetching...' : 'Sync Gateway'}</span>
+        </button>
 
         {/* Read Page Button */}
         <button className="glass-header-btn btn-voice-read" onClick={onSpeakPage} title="Read current page aloud">

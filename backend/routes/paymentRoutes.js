@@ -6,6 +6,10 @@ import {
   saveMerchantConfig,
   simulateTestPayment,
   recordUpiPayment,
+  createRazorpayOrder,
+  verifyRazorpayOrder,
+  syncGatewayPayments,
+  checkLivePayment,
 } from '../controllers/paymentController.js';
 import { verifyWebhookSignature } from '../middleware/verifyWebhook.js';
 import jwt from 'jsonwebtoken';
@@ -35,5 +39,11 @@ router.post('/simulate-test-payment', optionalAuth, simulateTestPayment);
 router.post('/simulate', optionalAuth, simulateTestPayment);
 router.post('/record-upi', optionalAuth, recordUpiPayment);
 router.post('/record', optionalAuth, recordUpiPayment);
+
+// Real-time Gateway Endpoints
+router.post('/create-order', optionalAuth, createRazorpayOrder);
+router.post('/verify-order', optionalAuth, verifyRazorpayOrder);
+router.get('/sync-gateway', optionalAuth, syncGatewayPayments);
+router.get('/live-check', optionalAuth, checkLivePayment);
 
 export default router;

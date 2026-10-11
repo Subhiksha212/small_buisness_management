@@ -6,6 +6,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 import VoiceAssistant from './components/VoiceAssistant';
+import SoundboxAlert from './components/SoundboxAlert';
 
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
@@ -20,6 +21,7 @@ import Transactions from './pages/History';
 import ProfitLoss from './pages/ProfitLoss';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
+import UpiAppSimulator from './pages/UpiAppSimulator';
 
 function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -76,6 +78,8 @@ function AppContent() {
                   isListening={isListening}
                 />
 
+                <SoundboxAlert />
+
                 <VoiceAssistant
                   isListening={isListening}
                   setIsListening={setIsListening}
@@ -93,6 +97,8 @@ function AppContent() {
                     <Route path="/profit-loss" element={<ProfitLoss />} />
                     <Route path="/help" element={<Help />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/upi-simulator" element={<UpiAppSimulator />} />
+                    <Route path="/upi-app" element={<UpiAppSimulator />} />
 
                     {/* Backwards compatibility redirects */}
                     <Route path="/add-sale" element={<Navigate to="/sales" replace />} />

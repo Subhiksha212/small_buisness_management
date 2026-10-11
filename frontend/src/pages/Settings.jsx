@@ -203,7 +203,9 @@ const Settings = () => {
             <div className="qr-preview-flex">
               <img src={qrCodeUrl} alt="Store UPI QR Code" className="store-qr-img" />
               <div className="qr-info-right">
-                <span className="badge-gpay-pill">Google Pay Ready</span>
+                <span className="badge-gpay-pill">
+                  <QrCode size={12} className="text-cyan" /> UPI QR Ready
+                </span>
                 <span className="vpa-text-display">{displayVpa}</span>
                 <span className="merchant-name-display">{shopName}</span>
                 <a
@@ -221,37 +223,77 @@ const Settings = () => {
 
         {/* RIGHT COLUMN: PAYMENT GATEWAYS & DEV SIMULATOR */}
         <div className="side-column-panels">
-          {/* UPI Gateway */}
+          {/* Payment Gateway Status Panel */}
+          <div className="sleek-panel gateway-panel-sleek">
+            <div className="panel-header-compact">
+              <div className="flex-align-gap">
+                <ShieldCheck size={16} className="text-emerald" />
+                <h3 className="panel-heading">Payment Gateway Architecture</h3>
+              </div>
+              <span
+                className={`status-micro-pill ${
+                  paymentStatus.gatewayStatus === 'Connected'
+                    ? 'pill-profit'
+                    : paymentStatus.gatewayStatus === 'Sandbox'
+                    ? 'pill-amber'
+                    : 'pill-standby'
+                }`}
+              >
+                {paymentStatus.gatewayStatus === 'Connected'
+                  ? '● Connected'
+                  : paymentStatus.gatewayStatus === 'Sandbox'
+                  ? '⚡ Sandbox Active'
+                  : '○ Not Connected'}
+              </span>
+            </div>
+
+            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.5', marginBottom: '12px' }}>
+              <div><strong>Gateway Provider:</strong> {paymentStatus.providerName || 'Razorpay / Cashfree / Paytm'}</div>
+              <div><strong>Environment:</strong> {paymentStatus.environment || 'sandbox'}</div>
+              <div><strong>Webhook Endpoint:</strong> <code style={{ fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>/api/payments/webhook</code></div>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: '600', fontSize: '12px' }}>
+                <Lock size={13} /> Strict Security Standard
+              </div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0' }}>
+                Never enter or share UPI PIN, OTP, Card PIN, or CVV. Full card numbers are never stored. Transactions are verified exclusively via HMAC cryptographic webhook signatures on the backend.
+              </p>
+            </div>
+          </div>
+
+          {/* UPI Store VPA Configuration */}
           <div className="sleek-panel gateway-panel-sleek">
             <div className="panel-header-compact">
               <div className="flex-align-gap">
                 <Wallet size={15} className="text-purple" />
-                <h3 className="panel-heading">1. Google Pay & UPI Connection</h3>
+                <h3 className="panel-heading">Merchant UPI Direct Display</h3>
               </div>
-              <span className={`status-micro-pill ${paymentStatus.upiConnected ? 'pill-profit' : 'pill-standby'}`}>
-                {paymentStatus.upiConnected ? '● Active' : '○ Standby'}
+              <span className={`status-micro-pill ${paymentStatus.merchantVpa ? 'pill-profit' : 'pill-standby'}`}>
+                {paymentStatus.merchantVpa ? '● VPA Saved' : '○ Standby'}
               </span>
             </div>
 
             <form onSubmit={handleConnectUpi} className="compact-form">
               <div className="form-group-compact">
-                <label className="field-label-compact">Primary UPI Provider</label>
+                <label className="field-label-compact">UPI Provider</label>
                 <select
                   value={upiProvider}
                   onChange={(e) => setUpiProvider(e.target.value)}
                   className="sleek-select-input"
                 >
-                  <option value="Google Pay">Google Pay (GPay) — UPI Direct & Business</option>
-                  <option value="PhonePe">PhonePe Business</option>
-                  <option value="Paytm">Paytm for Business</option>
-                  <option value="BHIM UPI">BHIM UPI / Bank UPI</option>
-                  <option value="Razorpay">Razorpay Merchant Gateway</option>
-                  <option value="Cashfree">Cashfree Payments</option>
+                  <option value="Google Pay">Google Pay (GPay)</option>
+                  <option value="PhonePe">PhonePe</option>
+                  <option value="Paytm">Paytm</option>
+                  <option value="BHIM UPI">BHIM UPI</option>
+                  <option value="Razorpay">Razorpay UPI</option>
+                  <option value="Cashfree">Cashfree UPI</option>
                 </select>
               </div>
 
               <div className="form-group-compact">
-                <label className="field-label-compact">Merchant UPI ID / VPA (GPay / Bank Handle)</label>
+                <label className="field-label-compact">Merchant UPI ID / VPA</label>
                 <input
                   type="text"
                   placeholder="e.g. yourname@okhdfcbank, store@okaxis, or 9876543210@paytm"
@@ -262,44 +304,7 @@ const Settings = () => {
               </div>
 
               <button type="submit" className="sleek-btn-primary btn-emerald">
-                Save & Connect Google Pay
-              </button>
-            </form>
-          </div>
-
-          {/* Card POS Gateway */}
-          <div className="sleek-panel gateway-panel-sleek">
-            <div className="panel-header-compact">
-              <div className="flex-align-gap">
-                <CreditCard size={15} className="text-blue" />
-                <h3 className="panel-heading">2. {t('cardStatus')}</h3>
-              </div>
-              <span className={`status-micro-pill ${paymentStatus.cardConnected ? 'pill-profit' : 'pill-standby'}`}>
-                {paymentStatus.cardConnected ? '● Connected' : '○ Standby'}
-              </span>
-            </div>
-
-            <p className="micro-notice">
-              <Lock size={12} style={{ display: 'inline', marginRight: '4px' }} />
-              PCI-DSS tokenized gateway. Sensitive card details are never stored locally.
-            </p>
-
-            <form onSubmit={handleConnectCard} className="compact-form">
-              <div className="form-group-compact">
-                <label className="field-label-compact">{t('selectProvider')}</label>
-                <select
-                  value={cardProvider}
-                  onChange={(e) => setCardProvider(e.target.value)}
-                  className="sleek-select-input"
-                >
-                  <option value="Razorpay">Razorpay Card POS Gateway</option>
-                  <option value="Cashfree">Cashfree Card Gateway</option>
-                  <option value="Stripe">Stripe Terminal / Card</option>
-                </select>
-              </div>
-
-              <button type="submit" className="sleek-btn-primary btn-blue">
-                {t('connectCard')}
+                Save Merchant VPA
               </button>
             </form>
           </div>
@@ -309,13 +314,26 @@ const Settings = () => {
             <div className="panel-header-compact">
               <div className="flex-align-gap">
                 <Zap size={15} className="text-amber" />
-                <h3 className="panel-heading">GPay & UPI Live Simulator</h3>
+                <h3 className="panel-heading">Sandbox Payment Simulator</h3>
               </div>
-              <span className="badge-test-mode">Instant Sync</span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: '800',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: '#fef3c7',
+                  color: '#b45309',
+                  border: '1px solid #fde68a',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                TEST PAYMENT — NOT REAL MONEY
+              </span>
             </div>
 
             <p className="micro-notice">
-              Test instant real-time ledger updates when receiving money (Customer payment) or sending money (Vendor payout) via Google Pay:
+              Simulate HMAC-verified sandbox webhooks for live ledger and real-time SSE updates. Disabled in production.
             </p>
 
             {testSuccess && (
@@ -329,16 +347,16 @@ const Settings = () => {
               <button
                 type="button"
                 className="sim-chip-btn sim-emerald"
-                onClick={() => handleRunSimulatedPayment('received', 500, 'Google Pay')}
+                onClick={() => handleRunSimulatedPayment('received', 500, 'UPI')}
               >
-                <ArrowDownLeft size={13} /> Receive ₹500 via GPay (Sale)
+                <ArrowDownLeft size={13} /> Test Inflow: +₹500 (Sale)
               </button>
               <button
                 type="button"
                 className="sim-chip-btn sim-rose"
-                onClick={() => handleRunSimulatedPayment('sent', 350, 'Google Pay', 'Stock')}
+                onClick={() => handleRunSimulatedPayment('sent', 350, 'UPI', 'Stock')}
               >
-                <ArrowUpRight size={13} /> Send ₹350 via GPay (Expense)
+                <ArrowUpRight size={13} /> Test Outflow: -₹350 (Expense)
               </button>
             </div>
           </div>

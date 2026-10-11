@@ -24,6 +24,11 @@ const expenseSchema = new mongoose.Schema(
       enum: ['Cash', 'UPI', 'Card'],
       default: 'Cash',
     },
+    paidTo: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     description: {
       type: String,
       trim: true,
@@ -52,9 +57,19 @@ const expenseSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    currency: {
+      type: String,
+      default: 'INR',
+    },
+    isTest: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     providerTransactionId: {
       type: String,
       sparse: true,
+      index: true,
     },
   },
   {

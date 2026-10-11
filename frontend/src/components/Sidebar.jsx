@@ -11,6 +11,7 @@ import {
   PieChart,
   HelpCircle,
   Settings,
+  Smartphone,
   Store,
   Utensils,
   User,
@@ -50,6 +51,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { to: '/scan', labelKey: 'navScanBill', icon: ScanLine },
     { to: '/transactions', labelKey: 'navTransactions', icon: ReceiptText },
     { to: '/profit-loss', labelKey: 'navProfitLoss', icon: PieChart },
+    { to: '/upi-app', labelKey: 'navUpiApp', icon: Smartphone },
     { to: '/help', labelKey: 'navVoiceHelp', icon: HelpCircle },
     { to: '/settings', labelKey: 'navSettings', icon: Settings },
   ];

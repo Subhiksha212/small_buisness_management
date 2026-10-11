@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { getDashboardData } from '../services/api';
+import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
   TrendingUp,
   TrendingDown,
@@ -16,6 +17,8 @@ import {
   CreditCard,
   Calendar,
   CheckCircle2,
+  Radio,
+  Smartphone,
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -34,21 +37,30 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Today');
 
-  useEffect(() => {
-    fetchDashboard();
-  }, []);
-
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const res = await getDashboardData('all');
       setData(res);
     } catch (err) {
       console.error('Error fetching dashboard:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  };
+  }, []);
+
+  // Real-Time Event Subscription (No polling!)
+  const { isConnected } = useRealtimeEvents({
+    onPaymentSuccess: () => fetchDashboard(false),
+    onSaleCreated: () => fetchDashboard(false),
+    onExpenseCreated: () => fetchDashboard(false),
+    onTransactionCreated: () => fetchDashboard(false),
+    onReconnect: () => fetchDashboard(false),
+  });
+
+  useEffect(() => {
+    fetchDashboard(true);
+  }, [fetchDashboard]);
 
   const isProfit = data.netProfit >= 0;
   const maxTotal = Math.max(data.totalSales, data.totalExpenses, 1);
@@ -63,6 +75,63 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-container-sleek">
+      {/* Live SSE Status Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: 'var(--text-primary, #0f172a)' }}>
+          {t('dashboard') || 'Dashboard'}
+        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => navigate('/upi-app')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#0f172a',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '999px',
+              padding: '4px 12px',
+              fontSize: '11px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.15)',
+              transition: 'transform 0.1s ease',
+            }}
+          >
+            <Smartphone size={12} style={{ color: '#38bdf8' }} />
+            <span>Open UPI App Simulator</span>
+          </button>
+
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: '600',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '3px 10px',
+              borderRadius: '999px',
+              backgroundColor: isConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+              color: isConnected ? '#059669' : '#64748b',
+              border: `1px solid ${isConnected ? 'rgba(16, 185, 129, 0.25)' : 'rgba(100, 116, 139, 0.25)'}`,
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: isConnected ? '#10b981' : '#94a3b8',
+                boxShadow: isConnected ? '0 0 6px #10b981' : 'none',
+              }}
+            />
+            {isConnected ? 'Real-Time Sync Active' : 'Connecting to Live Events...'}
+          </span>
+        </div>
+      </div>
+
       {/* 1. TOP STATS ROW - 4 Compact KPI Cards */}
       <div className="kpi-grid">
         {/* Total Sales */}
