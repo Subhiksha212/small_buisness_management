@@ -1,4 +1,5 @@
 import Expense from '../models/Expense.js';
+import sseService from '../services/sseService.js';
 
 // Add a new expense for authenticated user
 export const addExpense = async (req, res) => {
@@ -35,6 +36,17 @@ export const addExpense = async (req, res) => {
       paymentStatus: 'success',
       provider: chosenMethod === 'UPI' ? (upiApp || 'UPI') : chosenMethod === 'Card' ? 'Card POS' : 'Manual',
       providerTransactionId: utrNumber ? utrNumber.trim() : (chosenMethod === 'UPI' ? `UPI_OUT_${Date.now()}` : undefined),
+    });
+
+    sseService.emitToUser(req.user._id, 'expense.created', {
+      expenseId: expense._id,
+      amount: expense.amount,
+      category: expense.category,
+      paymentMethod: expense.paymentMethod,
+    });
+    sseService.emitToUser(req.user._id, 'expense.recorded', {
+      expenseId: expense._id,
+      amount: expense.amount,
     });
 
     res.status(201).json({

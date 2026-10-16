@@ -390,6 +390,84 @@ async function runTests() {
     assert(dashRes.status === 200, 'Dashboard data retrieved from MongoDB');
     assert(dashData.totalSales >= 1200, `Dashboard totals derived from DB records: totalSales = ₹${dashData.totalSales}`);
 
+    // ----------------------------------------------------
+    // TEST 13: Strict Test-Payment Exclusion from Real Production Revenue
+    // ----------------------------------------------------
+    console.log('\n--- TEST 13: Strict Test-Payment Exclusion from Production Revenue ---');
+    const prodDashRes = await fetch(`${baseUrl}/api/dashboard?includeTest=false`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    const prodDashData = await prodDashRes.json();
+    assert(prodDashRes.status === 200, 'Production dashboard query returned 200 OK');
+    assert(
+      prodDashData.totalSales === 0,
+      `Sandbox transactions strictly excluded from production totals (expected ₹0, got ₹${prodDashData.totalSales})`
+    );
+
+    // ----------------------------------------------------
+    // TEST 14: Multi-Tenant Data Isolation
+    // ----------------------------------------------------
+    console.log('\n--- TEST 14: Strict Multi-Tenant Data Isolation ---');
+    // User B attempts to access User A's product
+    const userBProductsRes = await fetch(`${baseUrl}/api/products`, {
+      headers: { Authorization: `Bearer ${tokenB}` },
+    });
+    const userBProducts = await userBProductsRes.json();
+    const hasUserAProduct = userBProducts.some((p) => String(p._id) === String(product1._id));
+    assert(hasUserAProduct === false, "User B cannot see User A's products (Strict multi-tenant isolation)");
+
+    // User B attempts to query User A's order
+    const userBOrderRes = await fetch(`${baseUrl}/api/orders/${orderJson.order._id}`, {
+      headers: { Authorization: `Bearer ${tokenB}` },
+    });
+    assert(userBOrderRes.status === 404, "User B gets 404 when requesting User A's order by ID");
+
+    // ----------------------------------------------------
+    // TEST 15: Duplicate UTR / Reference Number Detection
+    // ----------------------------------------------------
+    console.log('\n--- TEST 15: Duplicate UTR / Reference Detection ---');
+    const existingUtr = paymentIdOrderValid;
+    const dupCheckRes = await fetch(`${baseUrl}/api/payments/check-reference?utr=${existingUtr}`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    const dupCheckData = await dupCheckRes.json();
+    assert(dupCheckRes.status === 200, 'Check reference API returned 200 OK');
+    assert(dupCheckData.exists === true, 'Detected duplicate reference number correctly');
+
+    const freshUtr = `UNIQUE_UTR_${Date.now()}`;
+    const freshCheckRes = await fetch(`${baseUrl}/api/payments/check-reference?utr=${freshUtr}`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    const freshCheckData = await freshCheckRes.json();
+    assert(freshCheckData.exists === false, 'Unique reference number passed without conflict');
+
+    // ----------------------------------------------------
+    // TEST 16: Inventory Low-Stock Alert & Product Reports
+    // ----------------------------------------------------
+    console.log('\n--- TEST 16: Inventory Valuation & Reorder Reports ---');
+    const invReportRes = await fetch(`${baseUrl}/api/products/reports`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    const invReportData = await invReportRes.json();
+    assert(invReportRes.status === 200, 'Inventory reports API returned 200 OK');
+    assert(invReportData.totalProducts >= 1, `Total products reported accurately (got ${invReportData.totalProducts})`);
+    assert(typeof invReportData.totalStockValueAtRetail === 'number', 'Total stock valuation computed correctly');
+
+    // ----------------------------------------------------
+    // TEST 17: Practical Explainable Insights API
+    // ----------------------------------------------------
+    console.log('\n--- TEST 17: Business Forecasting & Insights API ---');
+    const insightsRes = await fetch(`${baseUrl}/api/dashboard/insights`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    const insightsData = await insightsRes.json();
+    assert(insightsRes.status === 200, 'Insights API returned 200 OK');
+    assert(Array.isArray(insightsData.insights), 'Insights list returned as array');
+    assert(
+      insightsData.insights.every((i) => i.recommendation && i.reason && i.suggestedAction),
+      'Every insight includes explainable recommendation, metric reason, and suggested action'
+    );
+
     console.log('\n====================================================');
     console.log(`TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
     console.log('====================================================');
@@ -403,3 +481,4 @@ async function runTests() {
 }
 
 runTests();
+

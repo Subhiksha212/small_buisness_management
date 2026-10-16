@@ -5,7 +5,11 @@ import Expense from '../models/Expense.js';
 
 // Generate JWT token
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'smart_business_secret_key_123', {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set in production environment.');
+  }
+  return jwt.sign({ id }, jwtSecret || 'smart_business_secret_key_123', {
     expiresIn: '30d',
   });
 };

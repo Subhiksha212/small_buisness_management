@@ -10,6 +10,7 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
+import setuRoutes from './routes/setuRoutes.js';
 import razorpayService from './services/razorpayService.js';
 
 dotenv.config();
@@ -51,6 +52,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/setu', setuRoutes);
 
 // Health check endpoint
 app.get('/', (req, res) => {

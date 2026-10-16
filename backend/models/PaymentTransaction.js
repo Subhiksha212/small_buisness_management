@@ -61,7 +61,7 @@ const paymentTransactionSchema = new mongoose.Schema(
     },
     verificationStatus: {
       type: String,
-      enum: ['verified', 'pending_verification', 'manual_entry'],
+      enum: ['verified', 'pending_verification', 'manual_entry', 'provider_verified', 'sandbox_test'],
       default: 'verified',
     },
     paymentStatus: {

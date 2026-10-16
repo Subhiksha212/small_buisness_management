@@ -15,35 +15,28 @@ import { verifyWebhookSignature } from '../middleware/verifyWebhook.js';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
-// Soft auth middleware: attaches req.user if token is present, but doesn't hard-block if absent
-const optionalAuth = async (req, res, next) => {
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'smart_business_jwt_secret_key_987654321');
-      req.user = await User.findById(decoded.id).select('-passwordHash');
-    } catch (e) {
-      // Ignore token failure for optional auth
-    }
-  }
-  next();
-};
+import { protect } from '../middleware/authMiddleware.js';
+import { checkReferenceNumber } from '../controllers/paymentController.js';
 
 const router = express.Router();
 
+// Public webhook endpoint with signature verification
 router.post('/webhook', verifyWebhookSignature, handlePaymentWebhook);
-router.get('/status', optionalAuth, getPaymentConnectionStatus);
-router.get('/automatic', optionalAuth, getAutomaticPayments);
-router.post('/configure-merchant', optionalAuth, saveMerchantConfig);
-router.post('/simulate-test-payment', optionalAuth, simulateTestPayment);
-router.post('/simulate', optionalAuth, simulateTestPayment);
-router.post('/record-upi', optionalAuth, recordUpiPayment);
-router.post('/record', optionalAuth, recordUpiPayment);
+
+// Protected endpoints for authenticated shop owner
+router.get('/status', protect, getPaymentConnectionStatus);
+router.get('/automatic', protect, getAutomaticPayments);
+router.post('/configure-merchant', protect, saveMerchantConfig);
+router.post('/simulate-test-payment', protect, simulateTestPayment);
+router.post('/simulate', protect, simulateTestPayment);
+router.post('/record-upi', protect, recordUpiPayment);
+router.post('/record', protect, recordUpiPayment);
+router.get('/check-reference', protect, checkReferenceNumber);
 
 // Real-time Gateway Endpoints
-router.post('/create-order', optionalAuth, createRazorpayOrder);
-router.post('/verify-order', optionalAuth, verifyRazorpayOrder);
-router.get('/sync-gateway', optionalAuth, syncGatewayPayments);
-router.get('/live-check', optionalAuth, checkLivePayment);
+router.post('/create-order', protect, createRazorpayOrder);
+router.post('/verify-order', protect, verifyRazorpayOrder);
+router.get('/sync-gateway', protect, syncGatewayPayments);
+router.get('/live-check', protect, checkLivePayment);
 
 export default router;

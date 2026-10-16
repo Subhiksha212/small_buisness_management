@@ -13,7 +13,12 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    if (config.headers && typeof config.headers.set === 'function') {
+      config.headers.set('Authorization', `Bearer ${token}`);
+    } else {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
   return config;
 }, (error) => {
@@ -25,10 +30,20 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Clear token on 401 if unauthorized
-      if (localStorage.getItem('token')) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      const responseMsg = (error.response.data?.message || '').toLowerCase();
+      const isAuthMiddlewareError =
+        responseMsg.includes('no token provided') ||
+        responseMsg.includes('token failed') ||
+        responseMsg.includes('user not found');
+
+      // Clear token on genuine user session expiration
+      if (isAuthMiddlewareError) {
+        if (localStorage.getItem('token')) {
+          localStorage.removeItem('token');
+        }
+        if (window.location.pathname !== '/settings' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
@@ -84,9 +99,85 @@ export const verifySale = async (id) => {
   return response.data;
 };
 
+export const refundSale = async (id) => {
+  const response = await api.patch(`/sales/${id}/refund`);
+  return response.data;
+};
+
+// Insights & Forecasting
+export const getDashboardInsights = async () => {
+  const response = await api.get('/dashboard/insights');
+  return response.data;
+};
+
+// Inventory & Products Endpoints
+export const getProducts = async (params = {}) => {
+  const response = await api.get('/products', { params });
+  return response.data;
+};
+
+export const createProduct = async (productData) => {
+  const response = await api.post('/products', productData);
+  return response.data;
+};
+
+export const updateProduct = async (id, productData) => {
+  const response = await api.put(`/products/${id}`, productData);
+  return response.data;
+};
+
+export const deleteProduct = async (id) => {
+  const response = await api.delete(`/products/${id}`);
+  return response.data;
+};
+
+export const adjustStock = async (id, data) => {
+  const response = await api.post(`/products/${id}/adjust-stock`, data);
+  return response.data;
+};
+
+export const getInventoryMovements = async (params = {}) => {
+  const response = await api.get('/products/movements', { params });
+  return response.data;
+};
+
+export const getLowStockProducts = async () => {
+  const response = await api.get('/products/low-stock');
+  return response.data;
+};
+
+export const getInventoryReports = async () => {
+  const response = await api.get('/products/reports');
+  return response.data;
+};
+
+export const lookupProduct = async (code) => {
+  const response = await api.get('/products/lookup', { params: { code } });
+  return response.data;
+};
+
+export const seedSampleProducts = async () => {
+  const response = await api.post('/products/seed');
+  return response.data;
+};
+
+
+export const checkReferenceUtr = async (utr) => {
+  const response = await api.get('/payments/check-reference', { params: { utr } });
+  return response.data;
+};
+
 export const getExpenses = async () => {
   const response = await api.get('/expenses');
   return response.data;
+};
+
+export const getTransactions = async () => {
+  const [sales, expenses] = await Promise.all([getSales(), getExpenses()]);
+  return [
+    ...(sales || []).map((s) => ({ ...s, type: 'Sale' })),
+    ...(expenses || []).map((e) => ({ ...e, type: 'Expense' })),
+  ];
 };
 
 export const createExpense = async (expenseData) => {
@@ -146,4 +237,51 @@ export const checkLivePayment = async (params = {}) => {
   return response.data;
 };
 
+// Setu Account Aggregator Endpoints
+export const getSetuConfig = async () => {
+  const response = await api.get('/setu/config');
+  return response.data;
+};
+
+export const createSetuConsent = async (payload = {}) => {
+  const response = await api.post('/setu/consents', payload);
+  return response.data;
+};
+
+export const verifySetuCallback = async (callbackData) => {
+  const response = await api.post('/setu/verify-callback', callbackData);
+  return response.data;
+};
+
+export const getSetuConsentStatus = async (consentId) => {
+  const response = await api.get(`/setu/consents/${encodeURIComponent(consentId)}/status`);
+  return response.data;
+};
+
+export const createSetuSession = async (payload = {}) => {
+  const response = await api.post('/setu/sessions', payload);
+  return response.data;
+};
+
+export const getSetuSession = async (sessionId) => {
+  const response = await api.get(`/setu/sessions/${encodeURIComponent(sessionId)}`);
+  return response.data;
+};
+
+export const fetchAndImportSetuData = async (payload = {}) => {
+  const response = await api.post('/setu/fetch-data', payload);
+  return response.data;
+};
+
+export const getSetuTransactions = async (params = {}) => {
+  const response = await api.get('/setu/transactions', { params });
+  return response.data;
+};
+
+export const classifySetuTransaction = async (id, payload = {}) => {
+  const response = await api.patch(`/setu/transactions/${id}/classify`, payload);
+  return response.data;
+};
+
 export default api;
+

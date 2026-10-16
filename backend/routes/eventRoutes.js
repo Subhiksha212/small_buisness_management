@@ -24,10 +24,12 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ message: 'Authentication required for real-time events stream.' });
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'smart_business_jwt_secret_key_987654321'
-    );
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret && process.env.NODE_ENV === 'production') {
+      return res.status(500).json({ message: 'Server configuration error.' });
+    }
+    const secretToUse = jwtSecret || 'smart_business_jwt_secret_key_987654321';
+    const decoded = jwt.verify(token, secretToUse);
 
     const user = await User.findById(decoded.id).select('_id email');
     if (!user) {

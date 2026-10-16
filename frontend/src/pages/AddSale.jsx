@@ -10,6 +10,7 @@ import {
   verifyRazorpayOrder,
   syncGatewayPayments,
   checkLivePayment,
+  checkReferenceUtr,
 } from '../services/api';
 import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
@@ -44,12 +45,32 @@ const AddSale = () => {
   const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash' | 'UPI' | 'Card'
   const [upiApp, setUpiApp] = useState('Google Pay');
   const [utrNumber, setUtrNumber] = useState('');
+  const [utrWarning, setUtrWarning] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [syncingGateway, setSyncingGateway] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState('');
+
+  const handleUtrBlur = async () => {
+    if (!utrNumber || utrNumber.trim().length < 6) {
+      setUtrWarning('');
+      return;
+    }
+    try {
+      const res = await checkReferenceUtr(utrNumber.trim());
+      if (res && res.exists) {
+        setUtrWarning(
+          `⚠️ Duplicate UTR Warning: Reference "${utrNumber.trim()}" was already recorded in a ₹${res.transaction?.amount} payment on ${new Date(res.transaction?.date || res.transaction?.createdAt).toLocaleDateString('en-IN')}. Please check receipt.`
+        );
+      } else {
+        setUtrWarning('');
+      }
+    } catch {
+      setUtrWarning('');
+    }
+  };
 
   // Real-time payment detection states
   const [isProcessingRazorpay, setIsProcessingRazorpay] = useState(false);
@@ -380,7 +401,30 @@ const AddSale = () => {
                 <span className="panel-subheading">Counter bill entry & digital payments</span>
               </div>
             </div>
-            <span className="pill-active-mode">Direct Entry</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/scan')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#0284c7',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '5px 12px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)',
+                }}
+              >
+                <QrCode size={13} />
+                <span>Scan Product QR</span>
+              </button>
+              <span className="pill-active-mode">Direct Entry</span>
+            </div>
           </div>
 
           {error && (
@@ -660,9 +704,28 @@ const AddSale = () => {
                   maxLength={20}
                   placeholder="e.g. 451493008588"
                   value={utrNumber}
-                  onChange={(e) => setUtrNumber(e.target.value)}
+                  onChange={(e) => {
+                    setUtrNumber(e.target.value);
+                    if (utrWarning) setUtrWarning('');
+                  }}
+                  onBlur={handleUtrBlur}
                   className="sleek-text-input"
                 />
+                {utrWarning && (
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: '#92400e',
+                      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      marginTop: '6px',
+                    }}
+                  >
+                    {utrWarning}
+                  </div>
+                )}
               </div>
             )}
 
@@ -724,7 +787,7 @@ const AddSale = () => {
             </div>
 
             <p className="micro-notice">
-              Connects directly to Razorpay REST API to fetch captured customer payments in real-time. Background synchronization runs every 15s.
+              Connects directly to Razorpay REST API and webhooks to reconcile captured customer payments. Periodic background synchronization runs with concurrency protection.
             </p>
 
             {syncFeedback && (

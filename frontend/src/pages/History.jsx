@@ -5,6 +5,7 @@ import {
   getExpenses,
   deleteSale,
   deleteExpense,
+  getSetuTransactions,
 } from '../services/api';
 import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
@@ -18,6 +19,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ReceiptText,
+  Building2,
+  Landmark,
 } from 'lucide-react';
 
 const Transactions = () => {
@@ -30,14 +33,18 @@ const Transactions = () => {
 
 
   // Filters
-  const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Sales', 'Expenses'
-  const [entryFilter, setEntryFilter] = useState('All'); // 'All', 'Manual', 'Automatic', 'Scanned'
+  const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Sales', 'Expenses', 'Bank Feed'
+  const [entryFilter, setEntryFilter] = useState('All'); // 'All', 'Manual', 'Automatic', 'Scanned', 'Setu AA'
   const [timeFilter, setTimeFilter] = useState('All Time'); // 'Today', 'This Week', 'This Month', 'This Year', 'All Time'
 
   const fetchData = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setLoading(true);
-      const [salesData, expensesData] = await Promise.all([getSales(), getExpenses()]);
+      const [salesData, expensesData, setuData] = await Promise.all([
+        getSales(),
+        getExpenses(),
+        getSetuTransactions().catch(() => ({ transactions: [] })),
+      ]);
 
       const formattedSales = salesData.map((s) => ({
         id: s._id,
@@ -71,7 +78,27 @@ const Transactions = () => {
         createdAt: e.createdAt,
       }));
 
-      const combined = [...formattedSales, ...formattedExpenses].sort(
+      const formattedBank = (setuData?.transactions || []).map((b) => ({
+        id: b._id,
+        rawId: b._id,
+        type: b.type === 'CREDIT' ? 'Bank Credit' : 'Bank Debit',
+        detail: b.narration || (b.type === 'CREDIT' ? 'Setu AA Deposit' : 'Setu AA Withdrawal'),
+        category: 'Bank Feed',
+        paymentMethod: b.mode || 'Bank Transfer',
+        upiApp: b.mode || 'Setu AA',
+        utrNumber: b.reference,
+        entryMethod: 'setu_aa',
+        paymentStatus: 'success',
+        amount: b.amount,
+        isTest: Boolean(b.isTest),
+        source: b.source,
+        accountMasked: b.accountMasked,
+        classification: b.classification,
+        alreadyExistsInApp: b.alreadyExistsInApp,
+        createdAt: b.transactionTimestamp || b.createdAt,
+      }));
+
+      const combined = [...formattedSales, ...formattedExpenses, ...formattedBank].sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
 
@@ -90,6 +117,11 @@ const Transactions = () => {
     onExpenseCreated: () => fetchData(false),
     onTransactionCreated: () => fetchData(false),
     onReconnect: () => fetchData(false),
+    onAnyEvent: (type) => {
+      if (type === 'setu.data_imported') {
+        fetchData(false);
+      }
+    },
   });
 
   useEffect(() => {
@@ -97,6 +129,11 @@ const Transactions = () => {
   }, [fetchData]);
 
   const handleDelete = async (tx) => {
+    if (tx.entryMethod === 'setu_aa') {
+      alert('Bank statement feed records cannot be deleted; they maintain financial audit compliance.');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this record?')) return;
 
     try {
@@ -111,16 +148,16 @@ const Transactions = () => {
     }
   };
 
-
-
   // Filter Logic
   const filteredTransactions = transactions.filter((tx) => {
     if (typeFilter === 'Sales' && tx.type !== 'Sale') return false;
     if (typeFilter === 'Expenses' && tx.type !== 'Expense') return false;
+    if (typeFilter === 'Bank Feed' && !tx.type.includes('Bank')) return false;
 
     if (entryFilter === 'Manual' && tx.entryMethod !== 'manual') return false;
     if (entryFilter === 'Automatic' && tx.entryMethod !== 'automatic') return false;
     if (entryFilter === 'Scanned' && tx.entryMethod !== 'scanned') return false;
+    if (entryFilter === 'Setu AA' && tx.entryMethod !== 'setu_aa') return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -165,7 +202,7 @@ const Transactions = () => {
   };
 
   return (
-    <div className="section-page-container">
+    <div className="section-page-container transactions-page-container">
       {/* Page Title & Breadcrumb */}
       <div className="page-intro-bar">
         <div>
@@ -222,13 +259,13 @@ const Transactions = () => {
             <div className="mini-filter-group">
               <span className="filter-tag-title">Type:</span>
               <div className="mini-segmented-control">
-                {['All', 'Sales', 'Expenses'].map((type) => (
+                {['All', 'Sales', 'Expenses', 'Bank Feed'].map((type) => (
                   <button
                     key={type}
                     className={`mini-segment-btn ${typeFilter === type ? 'active' : ''}`}
                     onClick={() => setTypeFilter(type)}
                   >
-                    {t(type.toLowerCase()) || type}
+                    {type === 'Bank Feed' ? '🏦 Bank Feed' : (t(type.toLowerCase()) || type)}
                   </button>
                 ))}
               </div>
@@ -238,13 +275,13 @@ const Transactions = () => {
             <div className="mini-filter-group">
               <span className="filter-tag-title">Source:</span>
               <div className="mini-segmented-control">
-                {['All', 'Manual', 'Automatic', 'Scanned'].map((source) => (
+                {['All', 'Manual', 'Automatic', 'Scanned', 'Setu AA'].map((source) => (
                   <button
                     key={source}
                     className={`mini-segment-btn ${entryFilter === source ? 'active' : ''}`}
                     onClick={() => setEntryFilter(source)}
                   >
-                    {t(source.toLowerCase()) || source}
+                    {source === 'Setu AA' ? '⚡ Setu AA' : (t(source.toLowerCase()) || source)}
                   </button>
                 ))}
               </div>
@@ -284,7 +321,7 @@ const Transactions = () => {
             <p className="empty-subtitle">No records match the selected filter criteria.</p>
           </div>
         ) : (
-          <div className="sleek-table-container">
+          <div className="sleek-table-container ledger-scroll-container">
             <table className="compact-table">
               <thead>
                 <tr>
@@ -303,17 +340,38 @@ const Transactions = () => {
                     <td className="cell-date-dim">{formatDate(tx.createdAt)}</td>
 
                     <td>
-                      <span className={`micro-type-chip ${tx.type === 'Sale' ? 'type-sale' : 'type-expense'}`}>
-                        {tx.type === 'Sale' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                        <span>{tx.type === 'Sale' ? t('sales') : t('expenses')}</span>
-                      </span>
+                      {tx.entryMethod === 'setu_aa' ? (
+                        <span
+                          className="micro-type-chip"
+                          style={{
+                            backgroundColor: tx.type === 'Bank Credit' ? 'rgba(2, 132, 199, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                            color: tx.type === 'Bank Credit' ? '#0284c7' : '#b45309',
+                            border: `1px solid ${tx.type === 'Bank Credit' ? 'rgba(2, 132, 199, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                          }}
+                        >
+                          <Building2 size={11} />
+                          <span>{tx.type}</span>
+                        </span>
+                      ) : (
+                        <span className={`micro-type-chip ${tx.type === 'Sale' ? 'type-sale' : 'type-expense'}`}>
+                          {tx.type === 'Sale' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                          <span>{tx.type === 'Sale' ? t('sales') : t('expenses')}</span>
+                        </span>
+                      )}
                     </td>
 
                     <td>
                       <strong className="tx-desc-title">{tx.detail}</strong>
-                      {tx.paidTo ? (
+                      {tx.accountMasked ? (
+                        <span className="tx-payee-sub" style={{ color: '#0284c7' }}>🏦 Bank Acc: {tx.accountMasked}</span>
+                      ) : tx.paidTo ? (
                         <span className="tx-payee-sub">👤 To: {tx.paidTo}</span>
                       ) : null}
+                      {tx.alreadyExistsInApp && (
+                        <span style={{ fontSize: '10px', color: '#059669', display: 'block', fontWeight: '600' }}>
+                          ✓ Reconciled with existing shop record
+                        </span>
+                      )}
                     </td>
 
                     <td>
@@ -326,26 +384,42 @@ const Transactions = () => {
                     </td>
 
                     <td>
-                      <span
-                        className={`micro-source-pill ${
-                          tx.entryMethod === 'automatic'
-                            ? 'src-auto'
+                      {tx.entryMethod === 'setu_aa' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <span
+                            className="micro-source-pill"
+                            style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}
+                          >
+                            🏦 Setu AA
+                          </span>
+                          {tx.isTest && (
+                            <span style={{ fontSize: '9px', fontWeight: '800', padding: '1px 4px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                              SANDBOX
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span
+                          className={`micro-source-pill ${
+                            tx.entryMethod === 'automatic'
+                              ? 'src-auto'
+                              : tx.entryMethod === 'scanned'
+                              ? 'src-scanned'
+                              : 'src-manual'
+                          }`}
+                        >
+                          {tx.entryMethod === 'automatic'
+                            ? t('automatic')
                             : tx.entryMethod === 'scanned'
-                            ? 'src-scanned'
-                            : 'src-manual'
-                        }`}
-                      >
-                        {tx.entryMethod === 'automatic'
-                          ? t('automatic')
-                          : tx.entryMethod === 'scanned'
-                          ? t('scanned')
-                          : t('manual')}
-                      </span>
+                            ? t('scanned')
+                            : t('manual')}
+                        </span>
+                      )}
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
-                      <span className={`tx-amount-compact ${tx.type === 'Sale' ? 'text-profit' : 'text-loss'}`}>
-                        {tx.type === 'Sale' ? '+' : '-'} ₹{tx.amount.toLocaleString('en-IN')}
+                      <span className={`tx-amount-compact ${tx.type === 'Sale' || tx.type === 'Bank Credit' ? 'text-profit' : 'text-loss'}`}>
+                        {tx.type === 'Sale' || tx.type === 'Bank Credit' ? '+' : '-'} ₹{tx.amount.toLocaleString('en-IN')}
                       </span>
                     </td>
 

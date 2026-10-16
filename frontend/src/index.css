@@ -249,8 +249,12 @@ body {
 
 /* App Header - Compact Glassmorphism */
 .app-header-sleek {
-  background: transparent;
-  padding: 14px 28px 4px 28px;
+  background: rgba(11, 26, 66, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25);
+  padding: 14px 28px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2618,6 +2622,496 @@ body {
   background: #059669 !important;
   color: #ffffff !important;
 }
+
+/* Profit & Loss 3-Card Minimal Layout (Exact Visual Match) */
+.pl-cards-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .pl-cards-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+.pl-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 142px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+.pl-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.pl-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pl-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pl-icon-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pl-icon-green {
+  background: #dcfce7;
+  color: #10b981;
+}
+
+.pl-icon-red {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.pl-card-amount {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 12px 0 16px 0;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.pl-amount-green {
+  color: #10b981;
+}
+
+.pl-amount-red {
+  color: #ef4444;
+}
+
+.pl-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pl-card-subtext {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.pl-chevron {
+  color: #94a3b8;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.pl-card:hover .pl-chevron {
+  transform: translateX(3px);
+  color: #64748b;
+}
+
+.pl-margin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.pl-chip-green {
+  background: #dcfce7;
+  color: #059669;
+}
+
+.pl-chip-red {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Transactions Page: Pinned Header/Toolbar with Scrollable Table */
+@media (min-height: 520px) {
+  .transactions-page-container {
+    height: calc(100vh - 100px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.table-card-compact {
+  flex: 1;
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+}
+
+.ledger-scroll-container {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 16px 14px 16px;
+}
+
+.ledger-scroll-container table.compact-table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 10;
+  box-shadow: 0 1px 0 #e2e8f0;
+  padding-top: 10px;
+  padding-bottom: 8px;
+}
+
+/* Smooth sleek scrollbar for Ledger Table */
+.ledger-scroll-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ledger-scroll-container::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.ledger-scroll-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.ledger-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ================= QR PRODUCT SCANNER & BILLING STYLES ================= */
+.scan-page-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px 12px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scan-tabs-bar {
+  display: flex;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  overflow-x: auto;
+}
+
+.scan-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.scan-tab-btn:hover {
+  color: #0f172a;
+  background: rgba(241, 245, 249, 0.8);
+}
+
+.scan-tab-btn.active {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+}
+
+.scan-tab-btn.active .tab-badge-pill {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.tab-badge-pill {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* 2-Column POS Layout */
+.pos-scan-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .pos-scan-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Scanner Card */
+.scanner-card {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Scanner Mode Selector */
+.scanner-mode-switch {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.scanner-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scanner-mode-btn.active {
+  background: #ffffff;
+  color: #0284c7;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Viewfinder Area */
+.viewfinder-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0f172a;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+#qr-reader {
+  width: 100% !important;
+  border: none !important;
+}
+
+#qr-reader video {
+  border-radius: 14px;
+  width: 100% !important;
+  object-fit: cover;
+}
+
+/* Custom Scanning Laser Animation */
+.scanner-laser-line {
+  position: absolute;
+  top: 15%;
+  left: 10%;
+  right: 10%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #38bdf8, #38bdf8, transparent);
+  box-shadow: 0 0 12px #38bdf8, 0 0 24px #0284c7;
+  border-radius: 2px;
+  z-index: 10;
+  pointer-events: none;
+  animation: scanLaser 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes scanLaser {
+  0% {
+    top: 15%;
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 85%;
+    opacity: 0.8;
+  }
+}
+
+.scanner-reticle-corners {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  z-index: 8;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.45);
+  border-radius: 12px;
+}
+
+.scanner-reticle-corners::before,
+.scanner-reticle-corners::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: #38bdf8;
+  border-style: solid;
+}
+
+.scanner-reticle-corners::before {
+  top: 0;
+  left: 0;
+  border-width: 3px 0 0 3px;
+  border-top-left-radius: 8px;
+}
+
+.scanner-reticle-corners::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 3px 3px 0;
+  border-bottom-right-radius: 8px;
+}
+
+/* Scanned Product Banner */
+.product-detected-banner {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%);
+  border: 1.5px solid #86efac;
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeInPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInPop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Quantity Stepper */
+.qty-stepper-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  cursor: pointer;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.qty-stepper-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+/* Active Bill / Cart Panel */
+.active-bill-panel {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 20px;
+}
+
+/* QR Hub Grid */
+.qr-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.qr-product-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.qr-product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.qr-sticker-box {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 
 
 

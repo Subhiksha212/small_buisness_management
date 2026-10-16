@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node test_payment_suite.js",
+    "test:arch": "node test_payment_architecture.js",
+    "test:setu": "node test_setu_callback.js"
   },
   "keywords": [],
   "author": "",

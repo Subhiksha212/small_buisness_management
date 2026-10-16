@@ -135,7 +135,7 @@ const Dashboard = () => {
       {/* 1. TOP STATS ROW - 4 Compact KPI Cards */}
       <div className="kpi-grid">
         {/* Total Sales */}
-        <div className="kpi-card" onClick={() => navigate('/sales')}>
+        <div className="kpi-card" onClick={() => navigate('/transactions')}>
           <div className="kpi-top">
             <span className="kpi-label">{t('totalSales')}</span>
             <div className="kpi-icon-badge bg-profit-soft">
@@ -205,7 +205,7 @@ const Dashboard = () => {
 
       {/* 2. COMPACT QUICK ACTION BAR */}
       <div className="quick-actions-strip">
-        <button className="sleek-action-pill btn-action-sale" onClick={() => navigate('/sales')}>
+        <button className="sleek-action-pill btn-action-sale" onClick={() => navigate('/add-sale')}>
           <PlusCircle size={16} />
           <span>Record Sale</span>
           <span className="pill-shortcut">Cash / UPI</span>
@@ -219,8 +219,8 @@ const Dashboard = () => {
 
         <button className="sleek-action-pill btn-action-scan" onClick={() => navigate('/scan')}>
           <ScanLine size={16} />
-          <span>Smart OCR Scan</span>
-          <span className="pill-shortcut">Auto-detect</span>
+          <span>Scan Product QR</span>
+          <span className="pill-shortcut">Auto Add to Ledger</span>
         </button>
       </div>
 

@@ -39,6 +39,15 @@ const productSchema = new mongoose.Schema(
       default: 'General',
       trim: true,
     },
+    minStockThreshold: {
+      type: Number,
+      default: 5,
+      min: [0, 'Threshold cannot be negative'],
+    },
+    expiryDate: {
+      type: Date,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -234,11 +234,25 @@ export const processVerifiedPayment = async (paymentData) => {
     associatedOrder.providerPaymentId = txnId;
 
     // Deduct stock for products EXACTLY ONCE
+    let calculatedCogs = 0;
+    const saleItems = [];
+
     if (!associatedOrder.inventoryDeducted) {
       for (const item of associatedOrder.items) {
         const product = await Product.findOne({ _id: item.productId, userId: targetUserId });
         if (product) {
           const previousStock = product.stockQuantity;
+          const costPrice = product.costPrice || 0;
+          calculatedCogs += (item.quantity || 1) * costPrice;
+
+          saleItems.push({
+            productId: product._id,
+            name: product.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            costPrice,
+          });
+
           product.stockQuantity = Math.max(0, product.stockQuantity - item.quantity);
           await product.save();
 
@@ -252,6 +266,17 @@ export const processVerifiedPayment = async (paymentData) => {
             newStock: product.stockQuantity,
             reason: `Order ${associatedOrder.orderNumber} paid via ${provider}`,
           });
+
+          // Low-stock alert check
+          const threshold = product.minStockThreshold !== undefined ? product.minStockThreshold : 5;
+          if (product.stockQuantity <= threshold) {
+            sseService.emitToUser(targetUserId, 'low.stock.alert', {
+              productId: product._id,
+              productName: product.name,
+              currentStock: product.stockQuantity,
+              threshold,
+            });
+          }
         }
       }
       associatedOrder.inventoryDeducted = true;
@@ -266,13 +291,15 @@ export const processVerifiedPayment = async (paymentData) => {
       ? 'GPay'
       : paymentMethod === 'Card' ? 'Card' : 'Other UPI';
 
-    // Create Sale record
+    // Create Sale record with COGS and items
     const sale = await Sale.create({
       userId: targetUserId,
       orderId: associatedOrder._id,
       amount: normalizedAmount,
+      costOfGoodsSold: calculatedCogs,
+      items: saleItems,
       paymentMethod: safeMethod,
-      verificationStatus: 'verified',
+      verificationStatus: isTest ? 'sandbox_test' : 'provider_verified',
       upiApp: ['GPay', 'PhonePe', 'Other UPI', 'UPI'].includes(safeMethod) ? (upiApp || provider) : '',
       utrNumber: utrNumber || txnId,
       referenceNumber: utrNumber || txnId,
@@ -297,13 +324,14 @@ export const processVerifiedPayment = async (paymentData) => {
       amount: normalizedAmount,
       currency,
       paymentMethod: ['UPI', 'Card'].includes(paymentMethod) ? paymentMethod : 'UPI',
+      verificationStatus: isTest ? 'sandbox_test' : 'provider_verified',
       paymentStatus: 'success',
       isTest: isTest || associatedOrder.isTest,
       utrNumber,
       processedAt: new Date(),
     });
 
-    // Dispatch real-time SSE notifications
+    // Dispatch real-time SSE notifications strictly to the authenticated shop owner
     sseService.emitToUser(targetUserId, 'payment.success', {
       provider,
       providerPaymentId: txnId,
@@ -313,12 +341,28 @@ export const processVerifiedPayment = async (paymentData) => {
       paymentMethod,
       isTest: sale.isTest,
     });
+    sseService.emitToUser(targetUserId, 'payment.confirmed', {
+      provider,
+      providerPaymentId: txnId,
+      orderId: associatedOrder._id,
+      amount: normalizedAmount,
+      isTest: sale.isTest,
+    });
     sseService.emitToUser(targetUserId, 'sale.created', {
       saleId: sale._id,
       amount: normalizedAmount,
       isTest: sale.isTest,
     });
+    sseService.emitToUser(targetUserId, 'sale.finalized', {
+      saleId: sale._id,
+      amount: normalizedAmount,
+      isTest: sale.isTest,
+    });
     sseService.emitToUser(targetUserId, 'inventory.updated', {
+      orderId: associatedOrder._id,
+      orderNumber: associatedOrder.orderNumber,
+    });
+    sseService.emitToUser(targetUserId, 'inventory.changed', {
       orderId: associatedOrder._id,
       orderNumber: associatedOrder.orderNumber,
     });
@@ -334,8 +378,8 @@ export const processVerifiedPayment = async (paymentData) => {
   }
 
   // CASE B: Payment does NOT have an associated product order (e.g. direct UPI QR scan / Direct link)
-  // Per requirement #9: "If a payment cannot be associated with a known product order:
-  // record/flag it appropriately if necessary, BUT DO NOT automatically deduct product inventory."
+  // Per requirement: If a payment cannot be associated with a known product order,
+  // record it, but DO NOT automatically deduct product inventory.
   let targetUserId = userId;
   if (!targetUserId) {
     const defaultUser = (await User.findOne({ email: 'user212@gmail.com' })) || (await User.findOne());
@@ -354,7 +398,7 @@ export const processVerifiedPayment = async (paymentData) => {
     userId: targetUserId,
     amount: normalizedAmount,
     paymentMethod: safeMethod,
-    verificationStatus: 'verified',
+    verificationStatus: isTest ? 'sandbox_test' : 'provider_verified',
     upiApp: ['GPay', 'PhonePe', 'Other UPI', 'UPI'].includes(safeMethod) ? (upiApp || provider) : '',
     utrNumber: utrNumber || txnId,
     referenceNumber: utrNumber || txnId,
@@ -377,14 +421,14 @@ export const processVerifiedPayment = async (paymentData) => {
     amount: normalizedAmount,
     currency,
     paymentMethod: safeMethod,
-    verificationStatus: 'verified',
+    verificationStatus: isTest ? 'sandbox_test' : 'provider_verified',
     paymentStatus: 'success',
     isTest,
     utrNumber,
     processedAt: new Date(),
   });
 
-  // Real-time SSE
+  // Real-time SSE strictly to target user (NO cross-user broadcast)
   const paymentPayload = {
     provider,
     providerPaymentId: txnId,
@@ -395,26 +439,20 @@ export const processVerifiedPayment = async (paymentData) => {
     isTest,
   };
   sseService.emitToUser(targetUserId, 'payment.success', paymentPayload);
-  sseService.broadcast('payment.success', paymentPayload);
+  sseService.emitToUser(targetUserId, 'payment.confirmed', paymentPayload);
 
   sseService.emitToUser(targetUserId, 'sale.created', {
     saleId: sale._id,
     amount: normalizedAmount,
     isTest,
   });
-  sseService.broadcast('sale.created', {
+  sseService.emitToUser(targetUserId, 'sale.finalized', {
     saleId: sale._id,
     amount: normalizedAmount,
     isTest,
   });
 
   sseService.emitToUser(targetUserId, 'transaction.created', {
-    transactionId: txnId,
-    amount: normalizedAmount,
-    type: 'Sale',
-    isTest,
-  });
-  sseService.broadcast('transaction.created', {
     transactionId: txnId,
     amount: normalizedAmount,
     type: 'Sale',

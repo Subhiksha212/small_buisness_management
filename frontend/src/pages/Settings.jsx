@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { getPaymentStatus, saveMerchantConfig, simulateTestPayment } from '../services/api';
+import {
+  getPaymentStatus,
+  saveMerchantConfig,
+  simulateTestPayment,
+  getSetuConfig,
+  createSetuConsent,
+  fetchAndImportSetuData,
+} from '../services/api';
 import {
   Settings as SettingsIcon,
   Globe,
@@ -16,6 +24,11 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Sparkles,
+  Building2,
+  ExternalLink,
+  RefreshCw,
+  AlertCircle,
+  Landmark,
 } from 'lucide-react';
 
 const Settings = () => {
@@ -36,9 +49,34 @@ const Settings = () => {
     merchantVpa: '',
   });
 
+  // Setu Account Aggregator State
+  const [setuConfig, setSetuConfig] = useState(null);
+  const [setuPhone, setSetuPhone] = useState('9999999999');
+  const [setuLoading, setSetuLoading] = useState(false);
+  const [setuResult, setSetuResult] = useState(null);
+  const [setuError, setSetuError] = useState('');
+
+  // Stage 3 Bank Data Fetch State
+  const [fetchConsentId, setFetchConsentId] = useState('');
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchResult, setFetchResult] = useState(null);
+  const [fetchError, setFetchError] = useState('');
+
   useEffect(() => {
     fetchStatus();
+    fetchSetuStatus();
   }, []);
+
+  const fetchSetuStatus = async () => {
+    try {
+      const res = await getSetuConfig();
+      if (res?.config) {
+        setSetuConfig(res.config);
+      }
+    } catch (err) {
+      console.warn('Setu config status fetch skipped or failed:', err.message);
+    }
+  };
 
   const fetchStatus = async () => {
     try {
@@ -107,6 +145,84 @@ const Settings = () => {
       setTimeout(() => setTestSuccess(''), 4500);
     } catch (err) {
       alert('Failed to execute simulated payment.');
+    }
+  };
+
+  const handleInitiateSetuConsent = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setSetuLoading(true);
+    setSetuError('');
+    setSetuResult(null);
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setSetuLoading(false);
+      setSetuError('Session expired. Please log in again to connect your bank account.');
+      return;
+    }
+
+    try {
+      const redirectUrl = `${window.location.origin}/setu-callback`;
+      const res = await createSetuConsent({
+        customerPhone: setuPhone.trim() || '9999999999',
+        redirectUrl,
+      });
+
+      if (res.success && res.consentUrl) {
+        setSetuResult(res);
+        // Open Setu Consent URL in a new tab for sandbox user approval
+        window.open(res.consentUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        setSetuError(res.message || 'Unable to create Setu consent session.');
+      }
+    } catch (err) {
+      console.error('Failed to initiate Setu AA consent:', err);
+      let errMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Error connecting to Setu Account Aggregator API.';
+
+      if (
+        err.response?.status === 401 &&
+        (errMsg.toLowerCase().includes('token') ||
+          errMsg.toLowerCase().includes('not authorized') ||
+          errMsg.toLowerCase().includes('unauthorized'))
+      ) {
+        errMsg = 'Your login session has expired or you are not logged in. Please log in to connect your bank account.';
+      }
+      setSetuError(errMsg);
+    } finally {
+      setSetuLoading(false);
+    }
+  };
+
+  const handleFetchBankTransactions = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const targetConsentId = fetchConsentId.trim() || setuResult?.consentId;
+    if (!targetConsentId) {
+      setFetchError('Please provide an active Consent ID or connect via Setu AA above.');
+      return;
+    }
+
+    setFetchLoading(true);
+    setFetchError('');
+    setFetchResult(null);
+
+    try {
+      const res = await fetchAndImportSetuData({ consentId: targetConsentId });
+      if (res.success) {
+        setFetchResult(res);
+      } else {
+        setFetchError(res.message || 'Failed to fetch bank data.');
+      }
+    } catch (err) {
+      console.error('Fetch bank data error:', err);
+      setFetchError(
+        err.response?.data?.message || err.message || 'Error communicating with Setu Data API.'
+      );
+    } finally {
+      setFetchLoading(false);
     }
   };
 
@@ -247,10 +363,40 @@ const Settings = () => {
               </span>
             </div>
 
-            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.5', marginBottom: '12px' }}>
-              <div><strong>Gateway Provider:</strong> {paymentStatus.providerName || 'Razorpay / Cashfree / Paytm'}</div>
-              <div><strong>Environment:</strong> {paymentStatus.environment || 'sandbox'}</div>
+            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6', marginBottom: '12px' }}>
+              <div><strong>Gateway Provider:</strong> {paymentStatus.providerName || 'Razorpay / Cashfree'}</div>
+              <div>
+                <strong>Environment:</strong>{' '}
+                <span style={{ fontWeight: '700', color: paymentStatus.environment === 'production' ? '#16a34a' : '#d97706' }}>
+                  {paymentStatus.environment === 'production' ? 'Production (Live)' : 'Sandbox / Test Mode'}
+                </span>
+              </div>
+              <div>
+                <strong>Auto Ingestion Status:</strong>{' '}
+                <span style={{ fontWeight: '600', color: paymentStatus.autoIngestionAvailable ? '#059669' : '#dc2626' }}>
+                  {paymentStatus.autoIngestionAvailable ? 'Active via HMAC Webhook & REST Sync' : 'Not Configured'}
+                </span>
+              </div>
+              <div>
+                <strong>Last Successful Sync:</strong>{' '}
+                {paymentStatus.lastSuccessfulSyncTime
+                  ? new Date(paymentStatus.lastSuccessfulSyncTime).toLocaleString('en-IN')
+                  : 'No sync recorded yet'}
+              </div>
+              {paymentStatus.lastSyncError && (
+                <div style={{ color: '#dc2626' }}>
+                  <strong>Last Sync Error:</strong> {paymentStatus.lastSyncError}
+                </div>
+              )}
               <div><strong>Webhook Endpoint:</strong> <code style={{ fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>/api/payments/webhook</code></div>
+            </div>
+
+            {/* Bank Feed Status */}
+            <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
+              <strong style={{ fontSize: '12px', color: '#0369a1' }}>Authorized Bank Feed Integration</strong>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0' }}>
+                Bank API feeds require formal corporate approval (e.g. ICICI Eazypay, HDFC Corporate Open Banking, Decentro). Direct personal bank account scraping is disabled for compliance and security.
+              </p>
             </div>
 
             <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
@@ -260,6 +406,243 @@ const Settings = () => {
               <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0' }}>
                 Never enter or share UPI PIN, OTP, Card PIN, or CVV. Full card numbers are never stored. Transactions are verified exclusively via HMAC cryptographic webhook signatures on the backend.
               </p>
+            </div>
+          </div>
+
+          {/* Setu Account Aggregator (Bank Linking) Panel */}
+          <div className="sleek-panel gateway-panel-sleek" style={{ borderLeft: '4px solid #0284c7' }}>
+            <div className="panel-header-compact">
+              <div className="flex-align-gap">
+                <Building2 size={16} className="text-cyan" />
+                <div>
+                  <h3 className="panel-heading">Setu Account Aggregator (AA)</h3>
+                  <span className="panel-subheading" style={{ fontSize: '11px', color: '#64748b' }}>
+                    RBI-regulated bank account linking & consent architecture
+                  </span>
+                </div>
+              </div>
+              <span
+                className={`status-micro-pill ${
+                  setuConfig?.configured ? 'pill-profit' : 'pill-amber'
+                }`}
+              >
+                {setuConfig?.configured ? '⚡ AA Sandbox Ready' : '○ Setup Required'}
+              </span>
+            </div>
+
+            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6', marginBottom: '14px' }}>
+              <div>
+                <strong>Aggregator Gateway:</strong> Setu FIU Sandbox (<code>{setuConfig?.baseUrl || 'https://fiu-sandbox.setu.co'}</code>)
+              </div>
+              <div>
+                <strong>Product Instance:</strong>{' '}
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#0369a1' }}>
+                  {setuConfig?.productInstanceId ? `${setuConfig.productInstanceId.substring(0, 8)}...` : 'Configured in backend .env'}
+                </span>
+              </div>
+              <div>
+                <strong>Redirect Target:</strong>{' '}
+                <code style={{ fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>
+                  /setu-callback
+                </code>
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#0284c7', fontWeight: '600', fontSize: '12px' }}>
+                <ShieldCheck size={14} /> REBIT Financial Information Purpose 101
+              </div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                Fetches read-only deposit transaction data with customer cryptographic consent. Passwords, MPINs, and OTPs are never stored or requested by our application.
+              </p>
+            </div>
+
+            {setuError && (
+              <div className="alert-compact" style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', marginBottom: '12px', padding: '10px 12px', borderRadius: '8px', fontSize: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600' }}>
+                  <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                  <span>{setuError}</span>
+                </div>
+                {(setuError.includes('Session expired') || setuError.toLowerCase().includes('token')) && (
+                  <div style={{ marginTop: '8px' }}>
+                    <Link
+                      to="/login"
+                      className="sleek-btn-primary btn-cyan"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', padding: '5px 12px', textDecoration: 'none' }}
+                    >
+                      Log In to Refresh Session &rarr;
+                    </Link>
+                  </div>
+                )}
+                {setuError.includes('INVALID_CREDENTIALS') && (
+                  <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #fed7d7', color: '#7f1d1d', lineHeight: '1.5' }}>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>💡 Quick Fix in Setu Bridge:</div>
+                    <ol style={{ margin: '0 0 6px 16px', padding: 0, fontSize: '11px' }}>
+                      <li>Go to <a href="https://bridge.setu.co" target="_blank" rel="noreferrer" style={{ color: '#0284c7', textDecoration: 'underline', fontWeight: '600' }}>bridge.setu.co</a> and open your Account Aggregator product.</li>
+                      <li>In <strong>Step 2 — Test your product</strong>, click <strong>"+ Add new"</strong> next to <em>No API credentials added</em>.</li>
+                      <li>Copy the generated <strong>Client ID</strong> & <strong>Client Secret</strong> into <code>backend/.env</code>.</li>
+                      <li>Restart your backend (<code>npm start</code>) and click the button above again.</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {setuResult && (
+              <div className="alert-compact alert-success mb-12" style={{ padding: '10px', borderRadius: '6px', fontSize: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', marginBottom: '4px' }}>
+                  <CheckCircle size={14} /> Consent Flow Initialized!
+                </div>
+                <div style={{ fontSize: '11px', color: '#166534' }}>
+                  Consent ID: <code>{setuResult.consentId}</code>
+                </div>
+                <div style={{ marginTop: '8px' }}>
+                  <a
+                    href={setuResult.consentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="sleek-btn-primary btn-emerald"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', padding: '5px 10px', textDecoration: 'none' }}
+                  >
+                    Open Setu Consent Screen <ExternalLink size={12} />
+                  </a>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleInitiateSetuConsent} className="compact-form">
+              <div className="form-group-compact">
+                <label className="field-label-compact">Customer Phone (Sandbox Default: 9999999999)</label>
+                <input
+                  type="text"
+                  placeholder="9999999999"
+                  value={setuPhone}
+                  onChange={(e) => setSetuPhone(e.target.value)}
+                  className="sleek-text-input"
+                  style={{ fontFamily: 'monospace' }}
+                />
+                <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                  Use <code>9999999999</code> for Setu Sandbox simulated FIP accounts (OTP: <code>123456</code>).
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="submit"
+                  disabled={setuLoading}
+                  className="sleek-btn-primary btn-cyan"
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: 1 }}
+                >
+                  {setuLoading ? (
+                    <>
+                      <RefreshCw size={14} className="spin" /> Creating Consent Session...
+                    </>
+                  ) : (
+                    <>
+                      <Building2 size={14} /> Connect Bank via Setu AA <ExternalLink size={13} />
+                    </>
+                  )}
+                </button>
+                <Link
+                  to="/setu-callback"
+                  className="sim-chip-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    textDecoration: 'none',
+                    padding: '8px 12px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    color: '#475569',
+                    backgroundColor: '#f8fafc',
+                  }}
+                  title="View callback inspection page"
+                >
+                  Inspect Callback
+                </Link>
+              </div>
+            </form>
+
+            {/* Stage 3: Bank Data Fetch Action */}
+            <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <strong style={{ fontSize: '12px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Landmark size={14} className="text-cyan" /> Stage 3: Bank Statement Data Fetch
+                </strong>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>REBIT FI Sessions</span>
+              </div>
+
+              {fetchError && (
+                <div className="alert-compact" style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', marginBottom: '10px', padding: '6px 10px', borderRadius: '6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle size={13} />
+                  <span>{fetchError}</span>
+                </div>
+              )}
+
+              {fetchResult && (
+                <div className="alert-compact alert-success mb-10" style={{ padding: '8px 10px', borderRadius: '6px', fontSize: '11px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700' }}>
+                    <CheckCircle size={13} />
+                    <span>Statement Sync Complete! (Status: {fetchResult.status})</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#166534', marginTop: '3px', lineHeight: '1.4' }}>
+                    • Imported: <strong>{fetchResult.importedCount}</strong> new transaction(s)<br />
+                    • Duplicates skipped: <strong>{fetchResult.skippedDuplicates}</strong><br />
+                    • Matched with shop records: <strong>{fetchResult.alreadyExistingCount || 0}</strong>
+                  </div>
+                  <div style={{ marginTop: '6px' }}>
+                    <Link to="/transactions" style={{ fontSize: '11px', fontWeight: '700', color: '#047857', textDecoration: 'underline' }}>
+                      View in Transactions / Ledger →
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group-compact">
+                <label className="field-label-compact" style={{ fontSize: '11px' }}>
+                  Consent ID to Fetch (auto-filled if approved):
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. b89e6231-50e5-4a57-b062-8172c72b2a60"
+                  value={fetchConsentId || setuResult?.consentId || ''}
+                  onChange={(e) => setFetchConsentId(e.target.value)}
+                  className="sleek-text-input"
+                  style={{ fontFamily: 'monospace', fontSize: '11px', padding: '6px 10px' }}
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={fetchLoading}
+                onClick={handleFetchBankTransactions}
+                className="sleek-btn-primary btn-emerald"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  width: '100%',
+                  fontSize: '12px',
+                  padding: '8px 12px',
+                  marginTop: '6px',
+                }}
+              >
+                {fetchLoading ? (
+                  <>
+                    <RefreshCw size={13} className="spin" /> Fetching & Syncing Bank Data...
+                  </>
+                ) : (
+                  <>
+                    <Landmark size={13} /> Fetch Bank Transactions (Stage 3)
+                  </>
+                )}
+              </button>
+              <span style={{ fontSize: '10px', color: '#64748b', display: 'block', marginTop: '4px', lineHeight: '1.3' }}>
+                Calls Setu <code>POST /sessions</code> & <code>GET /sessions/:id</code> to import transactions with duplicate protection into History and Dashboard.
+              </span>
             </div>
           </div>
 
@@ -307,6 +690,15 @@ const Settings = () => {
                 Save Merchant VPA
               </button>
             </form>
+
+            <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '10px', marginTop: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: '700', fontSize: '12px' }}>
+                Personal UPI Notice & Limitations
+              </div>
+              <p style={{ fontSize: '11px', color: '#78350f', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                Personal VPAs (Google Pay / PhonePe personal handles) do not provide automated transaction history feeds. Automatic ingestion is disabled for personal accounts. Payments must be verified manually or reconciled with the customer's 12-digit UTR reference number.
+              </p>
+            </div>
           </div>
 
           {/* Developer Webhook Simulator (Receive & Send Money) */}

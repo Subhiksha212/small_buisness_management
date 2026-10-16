@@ -12,6 +12,23 @@ class RazorpayService {
   constructor() {
     this.baseUrl = 'https://api.razorpay.com/v1';
     this.syncInterval = null;
+    this.isSyncing = false;
+    this.lastSuccessfulSyncTime = null;
+    this.lastSyncError = null;
+  }
+
+  /**
+   * Returns current synchronization and credential health status
+   */
+  getSyncStatus() {
+    const creds = this.getCredentials();
+    return {
+      isConfigured: creds.isConfigured,
+      isSyncing: this.isSyncing,
+      lastSuccessfulSyncTime: this.lastSuccessfulSyncTime,
+      lastSyncError: this.lastSyncError,
+      environment: process.env.PAYMENT_ENV || 'sandbox',
+    };
   }
 
   /**
@@ -162,66 +179,90 @@ class RazorpayService {
       return { success: false, reason: 'Credentials not configured', newlySynced: 0, totalFetched: 0 };
     }
 
-    let targetUserId = userId;
-    if (!targetUserId) {
-      const defaultUser = (await User.findOne({ email: 'user212@gmail.com' })) || (await User.findOne());
-      targetUserId = defaultUser?._id;
+    if (this.isSyncing) {
+      return { success: false, reason: 'Synchronization already in progress', newlySynced: 0, totalFetched: 0 };
     }
 
-    const payments = await this.fetchLatestPayments({ count: 25 });
-    const newlySynced = [];
+    this.isSyncing = true;
 
-    for (const p of payments) {
-      // Only process captured / successful payments
-      if (p.status !== 'captured') continue;
+    try {
+      let targetUserId = userId;
+      if (!targetUserId) {
+        const defaultUser = (await User.findOne({ email: 'user212@gmail.com' })) || (await User.findOne());
+        targetUserId = defaultUser?._id;
+      }
 
-      const existing = await PaymentTransaction.findOne({
-        provider: 'Razorpay',
-        providerPaymentId: p.id,
-      });
+      const payments = await this.fetchLatestPayments({ count: 25 });
+      const newlySynced = [];
 
-      if (!existing) {
-        const method = (p.method || '').toLowerCase() === 'card' ? 'Card' : 'UPI';
-        const upiApp = p.vpa ? 'UPI' : 'Razorpay';
-        const utrNumber = p.acquirer_data?.rrn || p.acquirer_data?.upi_transaction_id || p.id;
-        const cleanAmount = Number(p.amount) / 100;
+      for (const p of payments) {
+        // Only process captured / successful payments
+        if (p.status !== 'captured') continue;
 
-        const result = await processVerifiedPayment({
-          userId: targetUserId,
-          direction: 'received',
-          category: 'Stock',
+        const existing = await PaymentTransaction.findOne({
           provider: 'Razorpay',
           providerPaymentId: p.id,
-          providerOrderId: p.order_id || '',
-          amount: cleanAmount,
-          currency: p.currency || 'INR',
-          paymentMethod: method,
-          paymentStatus: 'success',
-          upiApp,
-          utrNumber,
-          description: p.description || `Razorpay ${method} Payment [${p.id}]`,
-          isTest: Boolean(p.id.startsWith('pay_')),
         });
 
-        if (result && !result.duplicate) {
-          newlySynced.push({
-            id: p.id,
+        if (!existing) {
+          const method = (p.method || '').toLowerCase() === 'card' ? 'Card' : 'UPI';
+          const upiApp = p.vpa ? 'UPI' : 'Razorpay';
+          const utrNumber = p.acquirer_data?.rrn || p.acquirer_data?.upi_transaction_id || p.id;
+          const cleanAmount = Number(p.amount) / 100;
+
+          const result = await processVerifiedPayment({
+            userId: targetUserId,
+            direction: 'received',
+            category: 'Stock',
+            provider: 'Razorpay',
+            providerPaymentId: p.id,
+            providerOrderId: p.order_id || '',
             amount: cleanAmount,
-            method,
+            currency: p.currency || 'INR',
+            paymentMethod: method,
+            paymentStatus: 'success',
+            upiApp,
             utrNumber,
-            orderId: p.order_id,
-            saleId: result.record?._id,
+            description: p.description || `Razorpay ${method} Payment [${p.id}]`,
+            isTest: Boolean(p.id.startsWith('pay_')),
           });
+
+          if (result && !result.duplicate) {
+            newlySynced.push({
+              id: p.id,
+              amount: cleanAmount,
+              method,
+              utrNumber,
+              orderId: p.order_id,
+              saleId: result.record?._id,
+            });
+          }
         }
       }
-    }
 
-    return {
-      success: true,
-      totalFetched: payments.length,
-      newlySynced: newlySynced.length,
-      syncedPayments: newlySynced,
-    };
+      this.lastSuccessfulSyncTime = new Date().toISOString();
+      this.lastSyncError = null;
+
+      return {
+        success: true,
+        totalFetched: payments.length,
+        newlySynced: newlySynced.length,
+        syncedPayments: newlySynced,
+        lastSuccessfulSyncTime: this.lastSuccessfulSyncTime,
+      };
+    } catch (error) {
+      this.lastSyncError = error.message;
+      console.error('[RAZORPAY SYNC ERROR]', error.message);
+      return {
+        success: false,
+        error: error.message,
+        newlySynced: 0,
+        totalFetched: 0,
+        lastSyncError: this.lastSyncError,
+      };
+    } finally {
+      this.isSyncing = false;
+    }
   }
 
   /**

@@ -17,8 +17,8 @@ const VoiceAssistant = ({ isListening, setIsListening, setSpeakTrigger, setStart
 
     if (path === '/') {
       speakText('voiceExplanationDashboard');
-    } else if (path === '/sales') {
-      speakText('voiceExplanationSales');
+    } else if (path === '/add-sale') {
+      speakText('voiceExplanationAddSale');
     } else if (path === '/expenses') {
       speakText('voiceExplanationExpenses');
     } else if (path === '/scan') {
@@ -191,13 +191,37 @@ const VoiceAssistant = ({ isListening, setIsListening, setSpeakTrigger, setStart
     }
 
     if (
-      lower.includes('add cash sale') ||
       lower.includes('add sale') ||
-      lower.includes('open sale') ||
+      lower.includes('new sale') ||
+      lower.includes('counter sale') ||
+      lower.includes('add cash sale') ||
+      lower.includes('விற்பனை சேர்க்க')
+    ) {
+      navigate('/add-sale');
+      return;
+    }
+
+    if (
+      lower.includes('sales ledger') ||
+      lower.includes('all sales') ||
+      lower.includes('sales history') ||
       lower.includes('sales') ||
       lower.includes('விற்பனை')
     ) {
-      navigate('/sales');
+      navigate('/transactions');
+      return;
+    }
+
+    if (
+      lower.includes('show reports') ||
+      lower.includes('forecast') ||
+      lower.includes('forecasts') ||
+      lower.includes('insights') ||
+      lower.includes('reports') ||
+      lower.includes('அறிக்கை') ||
+      lower.includes('முன்னறிவிப்பு')
+    ) {
+      navigate('/profit-loss');
       return;
     }
 
@@ -207,7 +231,7 @@ const VoiceAssistant = ({ isListening, setIsListening, setSpeakTrigger, setStart
       lower.includes('upi payments') ||
       lower.includes('card payments')
     ) {
-      navigate('/sales');
+      navigate('/transactions');
       return;
     }
 

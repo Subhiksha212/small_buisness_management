@@ -97,14 +97,15 @@ export const handlePaymentWebhook = async (req, res) => {
 };
 
 /**
+/**
  * Check Connection Status: GET /api/payments/status
- * Shows real gateway status without pretending gateway is connected if credentials are missing.
+ * Shows real gateway status, sync history, and personal UPI limitations
  */
 export const getPaymentConnectionStatus = async (req, res) => {
   try {
     let user = req.user;
-    if (!user) {
-      user = (await User.findOne({ email: 'user212@gmail.com' })) || (await User.findOne());
+    if (!user && req.user?._id) {
+      user = await User.findById(req.user._id);
     }
 
     const providerKey = process.env.PAYMENT_PROVIDER_KEY;
@@ -113,29 +114,88 @@ export const getPaymentConnectionStatus = async (req, res) => {
     const providerName = process.env.PAYMENT_PROVIDER || 'Razorpay';
 
     const isGatewayConfigured = Boolean(providerKey && webhookSecret);
+    const syncStatus = razorpayService.getSyncStatus();
     const vpa = user?.merchantVpa || merchantConfig.merchantVpa || '';
     const upiProvider = user?.upiProvider || merchantConfig.provider || 'Google Pay';
     const cardProvider = user?.cardProvider || merchantConfig.cardProvider || 'Razorpay';
 
-    let gatewayStatus = 'Not Connected';
+    let gatewayStatus = 'Not Configured';
     if (isGatewayConfigured) {
-      gatewayStatus = paymentEnv === 'sandbox' ? 'Sandbox' : 'Connected';
+      if (syncStatus.lastSuccessfulSyncTime) {
+        gatewayStatus = paymentEnv === 'sandbox' ? 'Sandbox Active' : 'Live Connected';
+      } else {
+        gatewayStatus = paymentEnv === 'sandbox' ? 'Sandbox Configured' : 'Live Configured';
+      }
     }
 
     res.status(200).json({
       gatewayStatus,
       isGatewayConfigured,
       environment: paymentEnv,
-      providerName: isGatewayConfigured ? providerName : 'Not Connected',
-      upiConnected: isGatewayConfigured || Boolean(vpa && vpa.trim() !== ''),
+      providerName: isGatewayConfigured ? providerName : 'None Configured',
+      upiConnected: Boolean(vpa && vpa.trim() !== '') || isGatewayConfigured,
       cardConnected: isGatewayConfigured,
       merchantVpa: vpa,
       upiProvider,
       cardProvider,
+      isSyncing: syncStatus.isSyncing,
+      lastSuccessfulSyncTime: syncStatus.lastSuccessfulSyncTime,
+      lastSyncError: syncStatus.lastSyncError,
+      autoIngestionAvailable: isGatewayConfigured,
+      personalUpiCapability: {
+        canDisplayQr: Boolean(vpa && vpa.trim() !== ''),
+        canRecordManually: true,
+        canAutoFetchBankStatement: false,
+        notice:
+          'Personal UPI handles (GPay/PhonePe) do not provide automated transaction history feeds. Confirmed payments must be recorded or reconciled manually via UTR reference numbers.',
+      },
     });
   } catch (error) {
     console.error('Error getting payment status:', error);
     res.status(500).json({ message: 'Failed to check payment status.' });
+  }
+};
+
+/**
+ * Check if a reference number / UTR already exists: GET /api/payments/check-reference?utr=...
+ */
+export const checkReferenceNumber = async (req, res) => {
+  try {
+    const { utr } = req.query;
+    if (!utr || !utr.trim()) {
+      return res.status(400).json({ message: 'Reference number or UTR is required.' });
+    }
+
+    const cleanUtr = utr.trim();
+    const userId = req.user?._id;
+
+    const existing = await Sale.findOne({
+      userId,
+      $or: [{ utrNumber: cleanUtr }, { referenceNumber: cleanUtr }, { providerTransactionId: cleanUtr }],
+    });
+
+    if (existing) {
+      return res.status(200).json({
+        exists: true,
+        message: `Warning: Reference #${cleanUtr} was already recorded on ${new Date(
+          existing.createdAt
+        ).toLocaleDateString()} for ₹${existing.amount}.`,
+        transaction: {
+          id: existing._id,
+          amount: existing.amount,
+          date: existing.createdAt,
+          paymentMethod: existing.paymentMethod,
+        },
+      });
+    }
+
+    res.status(200).json({
+      exists: false,
+      message: 'Reference number is unique.',
+    });
+  } catch (error) {
+    console.error('Error checking reference number:', error);
+    res.status(500).json({ message: error.message || 'Failed to check reference number.' });
   }
 };
 

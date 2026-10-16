@@ -21,7 +21,7 @@ const saleSchema = new mongoose.Schema(
     },
     verificationStatus: {
       type: String,
-      enum: ['verified', 'pending_verification', 'manual_entry'],
+      enum: ['verified', 'pending_verification', 'manual_entry', 'provider_verified', 'sandbox_test'],
       default: 'manual_entry',
       index: true,
     },
@@ -39,6 +39,20 @@ const saleSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    costOfGoodsSold: {
+      type: Number,
+      default: 0,
+      min: [0, 'Cost of goods sold cannot be negative'],
+    },
+    items: [
+      {
+        productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+        name: { type: String, default: '' },
+        quantity: { type: Number, default: 1 },
+        unitPrice: { type: Number, default: 0 },
+        costPrice: { type: Number, default: 0 },
+      },
+    ],
     entryMethod: {
       type: String,
       enum: ['manual', 'automatic', 'scanned'],
@@ -91,6 +105,10 @@ const saleSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+saleSchema.index({ userId: 1, createdAt: -1 });
+saleSchema.index({ userId: 1, isTest: 1, paymentStatus: 1 });
+saleSchema.index({ userId: 1, utrNumber: 1 });
 
 const Sale = mongoose.model('Sale', saleSchema);
 export default Sale;

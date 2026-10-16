@@ -1,81 +1,22 @@
-import Sale from '../models/Sale.js';
-import Expense from '../models/Expense.js';
+import { calculateFinancialMetrics } from '../services/financialService.js';
+import BankTransaction from '../models/BankTransaction.js';
 
 export const getDashboardData = async (req, res) => {
   try {
-    const { period = 'all', startDate, endDate } = req.query;
+    const { period = 'all', startDate, endDate, includeTest } = req.query;
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.PAYMENT_ENV === 'sandbox';
+    const shouldIncludeTest = includeTest === 'true' || includeTest === true || (includeTest !== 'false' && isTestEnv);
 
-    let dateFilter = { userId: req.user._id };
-
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (period === 'today') {
-      dateFilter.createdAt = { $gte: startOfToday };
-    } else if (period === 'week') {
-      const startOfWeek = new Date(startOfToday);
-      startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
-      dateFilter.createdAt = { $gte: startOfWeek };
-    } else if (period === 'month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      dateFilter.createdAt = { $gte: startOfMonth };
-    } else if (period === 'year') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      dateFilter.createdAt = { $gte: startOfYear };
-    } else if (startDate && endDate) {
-      dateFilter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
-      };
-    }
-
-    const allSales = await Sale.find(dateFilter);
-    const expenses = await Expense.find(dateFilter);
-
-    // Filter Rule: Only include finalized/verified sales for user in financial calculations
-    // Strictly exclude pending_verification, failed, and refunded payments
-    const validSales = allSales.filter((s) => {
-      if (s.verificationStatus === 'pending_verification') return false;
-      if (s.paymentStatus === 'pending' || s.paymentStatus === 'failed' || s.paymentStatus === 'refunded') return false;
-      return s.paymentStatus === 'success' || s.paymentStatus === 'recorded';
+    const metrics = await calculateFinancialMetrics({
+      userId: req.user._id,
+      period,
+      startDate,
+      endDate,
+      includeTest: shouldIncludeTest,
     });
 
-    // Total calculations
-    const totalSales = validSales.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-    const totalExpenses = expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-    const netProfit = totalSales - totalExpenses;
-    const currentBalance = netProfit;
-
-    // Payment method breakdown for Sales (Cash, GPay, PhonePe, Other UPI, Card)
-    const salesByPaymentMethod = {
-      cash: validSales.filter((s) => s.paymentMethod === 'Cash').reduce((acc, curr) => acc + curr.amount, 0),
-      gpay: validSales
-        .filter((s) => s.paymentMethod === 'GPay' || (s.paymentMethod === 'UPI' && s.upiApp?.toLowerCase().includes('google')))
-        .reduce((acc, curr) => acc + curr.amount, 0),
-      phonepe: validSales
-        .filter((s) => s.paymentMethod === 'PhonePe' || (s.paymentMethod === 'UPI' && s.upiApp?.toLowerCase().includes('phonepe')))
-        .reduce((acc, curr) => acc + curr.amount, 0),
-      otherUpi: validSales
-        .filter((s) => s.paymentMethod === 'Other UPI' || (s.paymentMethod === 'UPI' && !s.upiApp?.toLowerCase().includes('google') && !s.upiApp?.toLowerCase().includes('phonepe')))
-        .reduce((acc, curr) => acc + curr.amount, 0),
-      upi: validSales
-        .filter((s) => ['GPay', 'PhonePe', 'Other UPI', 'UPI'].includes(s.paymentMethod))
-        .reduce((acc, curr) => acc + curr.amount, 0),
-      card: validSales.filter((s) => s.paymentMethod === 'Card').reduce((acc, curr) => acc + curr.amount, 0),
-    };
-
-    // Category breakdown for Expenses
-    const expensesByCategory = {
-      stock: expenses.filter((e) => e.category === 'Stock').reduce((acc, curr) => acc + curr.amount, 0),
-      rent: expenses.filter((e) => e.category === 'Rent').reduce((acc, curr) => acc + curr.amount, 0),
-      electricity: expenses.filter((e) => e.category === 'Electricity').reduce((acc, curr) => acc + curr.amount, 0),
-      salary: expenses.filter((e) => e.category === 'Salary').reduce((acc, curr) => acc + curr.amount, 0),
-      transport: expenses.filter((e) => e.category === 'Transport').reduce((acc, curr) => acc + curr.amount, 0),
-      other: expenses.filter((e) => e.category === 'Other').reduce((acc, curr) => acc + curr.amount, 0),
-    };
-
     // Formatted Recent Transactions
-    const formattedSales = allSales.map((s) => ({
+    const formattedSales = metrics.allSales.map((s) => ({
       id: s._id,
       type: 'Sale',
       detail: s.description || (s.entryMethod === 'automatic' ? `${s.provider || 'UPI'} Payment` : 'Shop Sale'),
@@ -89,10 +30,11 @@ export const getDashboardData = async (req, res) => {
       paymentStatus: s.paymentStatus || 'recorded',
       amount: s.amount,
       description: s.description,
+      isTest: s.isTest || false,
       createdAt: s.createdAt,
     }));
 
-    const formattedExpenses = expenses.map((e) => ({
+    const formattedExpenses = metrics.allExpenses.map((e) => ({
       id: e._id,
       type: 'Expense',
       detail: e.description || (e.paidTo ? `Paid to ${e.paidTo}` : e.category),
@@ -106,24 +48,82 @@ export const getDashboardData = async (req, res) => {
       paymentStatus: e.paymentStatus || 'recorded',
       amount: e.amount,
       description: e.description,
+      isTest: e.isTest || false,
       createdAt: e.createdAt,
     }));
 
-    const recentTransactions = [...formattedSales, ...formattedExpenses]
+    // Fetch imported Bank Feed transactions (Setu Account Aggregator)
+    const bankFilter = { userId: req.user._id };
+    if (!shouldIncludeTest) {
+      bankFilter.isTest = { $ne: true };
+    }
+    const bankTxns = await BankTransaction.find(bankFilter)
+      .sort({ transactionTimestamp: -1 })
+      .limit(10)
+      .lean();
+
+    const formattedBank = bankTxns.map((b) => ({
+      id: b._id,
+      type: b.type === 'CREDIT' ? 'Bank Credit' : 'Bank Debit',
+      detail: b.narration || (b.type === 'CREDIT' ? 'Setu AA Deposit' : 'Setu AA Withdrawal'),
+      category: 'Bank Feed',
+      paymentMethod: b.mode || 'Bank Transfer',
+      verificationStatus: b.isTest ? 'sandbox_test' : 'provider_verified',
+      upiApp: b.mode || 'Setu AA',
+      utrNumber: b.reference,
+      provider: 'Setu AA',
+      entryMethod: 'setu_aa',
+      paymentStatus: 'success',
+      amount: b.amount,
+      description: b.narration,
+      isTest: b.isTest || false,
+      createdAt: b.transactionTimestamp || b.createdAt,
+      source: b.source,
+      accountMasked: b.accountMasked,
+      classification: b.classification,
+      alreadyExistsInApp: b.alreadyExistsInApp,
+    }));
+
+    const recentTransactions = [...formattedSales, ...formattedExpenses, ...formattedBank]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 8);
+      .slice(0, 10);
+
+    const bankFeedCount = await BankTransaction.countDocuments(bankFilter);
 
     res.status(200).json({
-      totalSales,
-      totalExpenses,
-      netProfit,
-      currentBalance,
-      salesByPaymentMethod,
-      expensesByCategory,
+      period: metrics.period,
+      startDate: metrics.startDate,
+      endDate: metrics.endDate,
+      totalSales: metrics.totalSales,
+      salesRevenue: metrics.salesRevenue,
+      costOfGoodsSold: metrics.costOfGoodsSold,
+      grossProfit: metrics.grossProfit,
+      totalExpenses: metrics.totalExpenses,
+      operatingExpenses: metrics.operatingExpenses,
+      netProfit: metrics.netProfit,
+      currentBalance: metrics.currentBalance,
+      cashTotal: metrics.cashTotal,
+      digitalTotal: metrics.digitalTotal,
+      salesCount: metrics.salesCount,
+      expensesCount: metrics.expensesCount,
+      salesByPaymentMethod: metrics.salesByPaymentMethod,
+      expensesByCategory: metrics.expensesByCategory,
       recentTransactions,
     });
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
     res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+import { generateBusinessInsights } from '../services/forecastingService.js';
+
+export const getDashboardInsights = async (req, res) => {
+  try {
+    const report = await generateBusinessInsights(req.user._id);
+    res.status(200).json(report);
+  } catch (error) {
+    console.error('Error generating business insights:', error);
+    res.status(500).json({ message: 'Failed to generate business insights.' });
   }
 };

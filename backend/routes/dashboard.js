@@ -1,11 +1,12 @@
 import express from 'express';
-import { getDashboardData } from '../controllers/dashboardController.js';
+import { getDashboardData, getDashboardInsights } from '../controllers/dashboardController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.use(protect); // Protect dashboard endpoint with user auth
+router.use(protect); // Protect dashboard endpoints with user auth
 
 router.get('/', getDashboardData);
+router.get('/insights', getDashboardInsights);
 
 export default router;

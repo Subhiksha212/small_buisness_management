@@ -4,19 +4,18 @@ import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
-  PlusCircle,
+  ShoppingCart,
   MinusCircle,
-  ScanLine,
   ReceiptText,
   PieChart,
   HelpCircle,
   Settings,
-  Smartphone,
   Store,
   Utensils,
   User,
   LogOut,
   X,
+  QrCode,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -46,15 +45,15 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const navItems = [
     { to: '/', labelKey: 'navDashboard', icon: LayoutDashboard },
-    { to: '/sales', labelKey: 'navSales', icon: PlusCircle },
+    { to: '/add-sale', labelKey: 'navAddSale', icon: ShoppingCart },
+    { to: '/scan', labelKey: 'navScanBill', icon: QrCode },
     { to: '/expenses', labelKey: 'navExpenses', icon: MinusCircle },
-    { to: '/scan', labelKey: 'navScanBill', icon: ScanLine },
     { to: '/transactions', labelKey: 'navTransactions', icon: ReceiptText },
     { to: '/profit-loss', labelKey: 'navProfitLoss', icon: PieChart },
-    { to: '/upi-app', labelKey: 'navUpiApp', icon: Smartphone },
     { to: '/help', labelKey: 'navVoiceHelp', icon: HelpCircle },
     { to: '/settings', labelKey: 'navSettings', icon: Settings },
   ];
+
 
   return (
     <>

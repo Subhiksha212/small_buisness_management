@@ -77,5 +77,9 @@ const expenseSchema = new mongoose.Schema(
   }
 );
 
+expenseSchema.index({ userId: 1, createdAt: -1 });
+expenseSchema.index({ userId: 1, isTest: 1, paymentStatus: 1 });
+expenseSchema.index({ userId: 1, utrNumber: 1 });
+
 const Expense = mongoose.model('Expense', expenseSchema);
 export default Expense;

@@ -3,11 +3,22 @@ import User from '../models/User.js';
 
 export const protect = async (req, res, next) => {
   let token;
+  const authHeader = req.headers.authorization;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     try {
-      token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'smart_business_secret_key_123');
+      token = authHeader.slice(7).trim();
+      if (!token) {
+        return res.status(401).json({ message: 'Not authorized, no token provided' });
+      }
+
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret && process.env.NODE_ENV === 'production') {
+        console.error('[SECURITY CRITICAL] JWT_SECRET must be configured in production environment.');
+        return res.status(500).json({ message: 'Internal server configuration error.' });
+      }
+      const secretToUse = jwtSecret || 'smart_business_secret_key_123';
+      const decoded = jwt.verify(token, secretToUse);
 
       req.user = await User.findById(decoded.id).select('-passwordHash');
 
@@ -15,7 +26,7 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({ message: 'Not authorized, user not found' });
       }
 
-      next();
+      return next();
     } catch (error) {
       console.error('Auth verification failed:', error.message);
       return res.status(401).json({ message: 'Not authorized, token failed' });

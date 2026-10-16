@@ -22,6 +22,8 @@ import ProfitLoss from './pages/ProfitLoss';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
 import UpiAppSimulator from './pages/UpiAppSimulator';
+import SetuCallback from './pages/SetuCallback';
+import SetuSandboxApproval from './pages/SetuSandboxApproval';
 
 function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,20 +92,25 @@ function AppContent() {
                 <main className="content-area">
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
-                    <Route path="/sales" element={<AddSale />} />
+                    <Route path="/add-sale" element={<AddSale />} />
                     <Route path="/expenses" element={<AddExpense />} />
-                    <Route path="/scan" element={<ScanBill />} />
                     <Route path="/transactions" element={<Transactions />} />
                     <Route path="/profit-loss" element={<ProfitLoss />} />
+                    <Route path="/scan" element={<ScanBill />} />
                     <Route path="/help" element={<Help />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/upi-simulator" element={<UpiAppSimulator />} />
                     <Route path="/upi-app" element={<UpiAppSimulator />} />
+                    <Route path="/setu-callback" element={<SetuCallback />} />
+                    <Route path="/setu-sandbox-approval" element={<SetuSandboxApproval />} />
 
                     {/* Backwards compatibility redirects */}
-                    <Route path="/add-sale" element={<Navigate to="/sales" replace />} />
+                    <Route path="/sales" element={<Navigate to="/transactions" replace />} />
+                    <Route path="/inventory" element={<Navigate to="/" replace />} />
+                    <Route path="/reports" element={<Navigate to="/profit-loss" replace />} />
                     <Route path="/add-expense" element={<Navigate to="/expenses" replace />} />
                     <Route path="/history" element={<Navigate to="/transactions" replace />} />
+                    <Route path="/stock" element={<Navigate to="/" replace />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </main>
