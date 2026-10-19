@@ -12,6 +12,8 @@ import {
 } from '../services/api';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import jsQR from 'jsqr';
+import { createWorker } from 'tesseract.js';
+import { parseReceiptText } from '../utils/billParser';
 
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -39,10 +41,18 @@ import {
   Zap,
   Check,
   RotateCcw,
+  RotateCw,
   Store,
   ExternalLink,
   Info,
   ReceiptText,
+  CameraOff,
+  Eye,
+  EyeOff,
+  Copy,
+  Calendar,
+  Hash,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 // Formats supported for both camera & image uploads
@@ -126,16 +136,36 @@ const ScanBill = () => {
 
 
   // ==========================================
-  // TAB 2: OCR RECEIPT SCANNER STATE
+  // TAB 2: REAL OCR & LIVE CAMERA BILL SCANNER STATE
   // ==========================================
+  const billVideoRef = useRef(null);
+  const billStreamRef = useRef(null);
+  const ocrWorkerRef = useRef(null);
+
+  const [billScannerMode, setBillScannerMode] = useState('camera'); // 'camera' | 'upload'
+  const [isBillCameraRunning, setIsBillCameraRunning] = useState(false);
+  const [isBillCameraStarting, setIsBillCameraStarting] = useState(false);
+  const [billVideoReady, setBillVideoReady] = useState(false);
+  const [billFacingMode, setBillFacingMode] = useState('environment'); // 'environment' (back camera preferred for bills)
+  const [billCameraError, setBillCameraError] = useState('');
+  const [capturedBillUrl, setCapturedBillUrl] = useState(null);
+  const [billRotation, setBillRotation] = useState(0);
+  const [enhanceContrast, setEnhanceContrast] = useState(true);
+
+  // OCR Processing State
   const [ocrFile, setOcrFile] = useState(null);
   const [ocrPreview, setOcrPreview] = useState(null);
   const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrStatusText, setOcrStatusText] = useState('');
+  const [ocrRawText, setOcrRawText] = useState('');
+  const [showRawText, setShowRawText] = useState(false);
   const [ocrData, setOcrData] = useState(null);
   const [ocrDuplicateWarning, setOcrDuplicateWarning] = useState('');
   const [ocrShowConfirm, setOcrShowConfirm] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrSaving, setOcrSaving] = useState(false);
+  const [copiedRawText, setCopiedRawText] = useState(false);
 
   // ==========================================
   // TAB 3: PRODUCT QR GENERATOR & INVENTORY HUB
@@ -870,32 +900,276 @@ const ScanBill = () => {
   };
 
   // ==========================================
-  // TAB 2: OCR RECEIPT PROCESSORS
+  // TAB 2: LIVE CAMERA BILL SCANNER & REAL OCR
   // ==========================================
-  const handleOcrFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setOcrFile(file);
-      setOcrPreview(URL.createObjectURL(file));
-      setOcrData(null);
-      setOcrError('');
+
+  // Stop bill camera stream and release hardware tracks
+  const stopBillCamera = useCallback(() => {
+    if (billStreamRef.current) {
+      try {
+        billStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+        });
+      } catch (e) {
+        console.warn('Error stopping bill camera tracks:', e);
+      }
+      billStreamRef.current = null;
     }
+    if (billVideoRef.current) {
+      billVideoRef.current.srcObject = null;
+    }
+    setIsBillCameraRunning(false);
+    setIsBillCameraStarting(false);
+    setBillVideoReady(false);
+  }, []);
+
+  // Start live bill camera stream with front/back toggle
+  const startBillCamera = useCallback(async () => {
+    if (isBillCameraStarting) return;
+    setBillCameraError('');
+    setIsBillCameraStarting(true);
+
+    // Stop existing camera track before starting a new one
+    if (billStreamRef.current) {
+      billStreamRef.current.getTracks().forEach((t) => t.stop());
+      billStreamRef.current = null;
+    }
+
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setIsBillCameraStarting(false);
+      setBillCameraError(
+        'Camera API is not supported in this browser. Please use "Upload Receipt Image" below, or run in a secure origin (localhost or HTTPS).'
+      );
+      return;
+    }
+
+    try {
+      let stream;
+      try {
+        // High resolution preferred for reading fine receipt print
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: billFacingMode },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Fallback constraint if high-res was rejected by camera driver
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: billFacingMode },
+          audio: false,
+        });
+      }
+
+      billStreamRef.current = stream;
+
+      if (billVideoRef.current) {
+        billVideoRef.current.srcObject = stream;
+        billVideoRef.current.onloadedmetadata = () => {
+          setBillVideoReady(true);
+          billVideoRef.current?.play().catch(() => {});
+        };
+      }
+
+      setIsBillCameraRunning(true);
+      setIsBillCameraStarting(false);
+    } catch (err) {
+      console.warn('Bill camera start error:', err);
+      setIsBillCameraRunning(false);
+      setIsBillCameraStarting(false);
+      setBillVideoReady(false);
+
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setBillCameraError(
+          'Camera access was denied by your browser. Please click the camera/lock icon in your address bar, allow camera permissions, and click "Start Camera".'
+        );
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setBillCameraError(
+          'No camera device found on this system. Please connect a webcam or switch to "Upload Receipt Image".'
+        );
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setBillCameraError(
+          'The camera is currently in use by another tab or app. Please close other camera programs and try again.'
+        );
+      } else {
+        setBillCameraError(
+          `Unable to access camera (${err.message || 'Unknown error'}). Please check camera permissions or use "Upload Receipt Image".`
+        );
+      }
+    }
+  }, [billFacingMode, isBillCameraStarting]);
+
+  // Tab 2 camera lifecycle management
+  useEffect(() => {
+    if (activeTab === 'ocrBill' && billScannerMode === 'camera' && !ocrPreview && !ocrData) {
+      const timer = setTimeout(() => {
+        startBillCamera();
+      }, 300);
+      return () => {
+        clearTimeout(timer);
+        stopBillCamera();
+      };
+    } else {
+      stopBillCamera();
+    }
+
+    return () => {
+      stopBillCamera();
+      if (ocrWorkerRef.current) {
+        ocrWorkerRef.current.terminate().catch(() => {});
+        ocrWorkerRef.current = null;
+      }
+    };
+  }, [activeTab, billScannerMode, billFacingMode, ocrPreview, ocrData, startBillCamera, stopBillCamera]);
+
+  // Capture current high-res camera frame
+  const captureBillFrame = () => {
+    const video = billVideoRef.current;
+    if (!video || video.readyState < 2) {
+      setBillCameraError('Camera frame is still initializing. Please wait a moment.');
+      return;
+    }
+
+    const w = video.videoWidth || 1280;
+    const h = video.videoHeight || 720;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    setCapturedBillUrl(dataUrl);
+    setOcrPreview(dataUrl);
+    setBillRotation(0);
+    setOcrData(null);
+    setOcrRawText('');
+    setOcrError('');
+    stopBillCamera();
   };
 
+  // Rotate captured/uploaded image in 90-degree increments
+  const rotateCapturedBill = (angleDeg = 90) => {
+    if (!ocrPreview) return;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const isSwapped = angleDeg === 90 || angleDeg === 270;
+      canvas.width = isSwapped ? img.height : img.width;
+      canvas.height = isSwapped ? img.width : img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((angleDeg * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      const rotatedUrl = canvas.toDataURL('image/jpeg', 0.95);
+      setCapturedBillUrl(rotatedUrl);
+      setOcrPreview(rotatedUrl);
+    };
+    img.src = ocrPreview;
+  };
+
+  // Image preprocessing: Grayscale + dynamic contrast stretching for thermal paper receipts
+  const preprocessImageForOcr = (imageSource) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(imageSource);
+
+          ctx.drawImage(img, 0, 0);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imgData.data;
+
+          let minLum = 255;
+          let maxLum = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            if (lum < minLum) minLum = lum;
+            if (lum > maxLum) maxLum = lum;
+          }
+
+          const range = maxLum - minLum || 1;
+          for (let i = 0; i < data.length; i += 4) {
+            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            let stretched = ((lum - minLum) / range) * 255;
+            stretched = Math.pow(stretched / 255, 1.25) * 255;
+            data[i] = stretched;
+            data[i + 1] = stretched;
+            data[i + 2] = stretched;
+          }
+
+          ctx.putImageData(imgData, 0, 0);
+          resolve(canvas.toDataURL('image/jpeg', 0.95));
+        } catch {
+          resolve(imageSource);
+        }
+      };
+      img.onerror = () => resolve(imageSource);
+      img.src = imageSource;
+    });
+  };
+
+  // Image upload handler
+  const handleOcrFileSelect = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setOcrError('Selected file is not an image. Please choose a JPG, PNG, or WEBP receipt photo.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setOcrError('Image size exceeds 15MB. Please choose a smaller photo.');
+      return;
+    }
+
+    setOcrFile(file);
+    setOcrError('');
+    setOcrData(null);
+    setOcrRawText('');
+    setOcrDuplicateWarning('');
+    setOcrShowConfirm(false);
+
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      const url = loadEvt.target.result;
+      setCapturedBillUrl(url);
+      setOcrPreview(url);
+      stopBillCamera();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Duplicate transaction checker
   const checkDuplicateBill = async (amount, merchant) => {
+    if (!amount || Number(amount) <= 0) return;
     try {
       const txRes = await getTransactions();
       const list = Array.isArray(txRes) ? txRes : [];
       const match = list.find((t) => {
         const amtMatch = Math.abs(Number(t.amount) - Number(amount)) < 0.01;
         const textMatch =
-          t.description?.toLowerCase().includes(merchant.toLowerCase()) ||
-          (t.category && merchant.toLowerCase().includes(t.category.toLowerCase()));
+          (merchant && t.description?.toLowerCase().includes(merchant.toLowerCase())) ||
+          (t.paidTo && merchant && t.paidTo.toLowerCase().includes(merchant.toLowerCase())) ||
+          (t.category && merchant && merchant.toLowerCase().includes(t.category.toLowerCase()));
         return amtMatch && textMatch;
       });
       if (match) {
         setOcrDuplicateWarning(
-          `Duplicate Alert: A transaction for ₹${amount} matching "${merchant}" was recorded on ${new Date(
+          `Duplicate Alert: A transaction for ₹${amount} matching "${merchant || match.description}" was recorded on ${new Date(
             match.date || match.createdAt
           ).toLocaleDateString('en-IN')}. Verify before saving.`
         );
@@ -907,54 +1181,11 @@ const ScanBill = () => {
     }
   };
 
-  const handleSampleReceipt = (type) => {
-    setOcrScanning(true);
-    setOcrError('');
-    setOcrDuplicateWarning('');
-    setOcrShowConfirm(false);
-
-    setTimeout(() => {
-      let data;
-      if (type === 'electricity') {
-        data = {
-          merchant: 'State Electricity Board',
-          amount: 1450,
-          type: 'Expense',
-          category: 'Electricity',
-          paymentMethod: 'UPI',
-          description: 'Electricity bill - Store connection',
-          confidence: '99.4%',
-        };
-      } else if (type === 'stock') {
-        data = {
-          merchant: 'Sri Meenakshi Traders Ltd',
-          amount: 8250,
-          type: 'Expense',
-          category: 'Stock',
-          paymentMethod: 'Cash',
-          description: 'Weekly retail stock supply',
-          confidence: '98.8%',
-        };
-      } else {
-        data = {
-          merchant: 'Counter Sale Bill #409',
-          amount: 3200,
-          type: 'Sale',
-          category: 'Stock',
-          paymentMethod: 'UPI',
-          description: 'Bulk customer order',
-          confidence: '97.9%',
-        };
-      }
-      setOcrData(data);
-      checkDuplicateBill(data.amount, data.merchant);
-      setOcrScanning(false);
-    }, 700);
-  };
-
-  const handleRunOcrScan = () => {
-    if (!ocrFile) {
-      setOcrError('Please select a receipt image first.');
+  // Real Tesseract OCR recognition runner
+  const handleRunRealOcr = async () => {
+    const src = ocrPreview || capturedBillUrl;
+    if (!src) {
+      setOcrError('Please capture or upload a bill image first.');
       return;
     }
 
@@ -962,72 +1193,133 @@ const ScanBill = () => {
     setOcrError('');
     setOcrDuplicateWarning('');
     setOcrShowConfirm(false);
+    setOcrProgress(5);
+    setOcrStatusText('Initializing OCR vision engine...');
 
-    setTimeout(() => {
-      const filename = ocrFile.name.toLowerCase();
-      let extractedType = 'Expense';
-      let extractedCategory = 'Stock';
-      let extractedAmount = 2450;
-      let extractedMerchant = 'ABC Wholesale Supplies';
-      let extractedPayment = 'UPI';
-
-      if (filename.includes('electricity') || filename.includes('power')) {
-        extractedCategory = 'Electricity';
-        extractedAmount = 1850;
-        extractedMerchant = 'Electricity Board';
-      } else if (filename.includes('rent')) {
-        extractedCategory = 'Rent';
-        extractedAmount = 8000;
-        extractedMerchant = 'Shop Owner Rent';
-      } else if (filename.includes('sale') || filename.includes('customer')) {
-        extractedType = 'Sale';
-        extractedAmount = 3500;
-        extractedMerchant = 'Retail Sale Bill';
+    try {
+      let processedSrc = src;
+      if (enhanceContrast) {
+        setOcrStatusText('Enhancing receipt contrast for clear reading...');
+        processedSrc = await preprocessImageForOcr(src);
       }
 
-      const data = {
-        merchant: extractedMerchant,
-        amount: extractedAmount,
-        type: extractedType,
-        category: extractedCategory,
-        paymentMethod: extractedPayment,
-        description: `Scanned: ${extractedMerchant}`,
-        confidence: '98.5%',
-      };
+      setOcrProgress(15);
+      setOcrStatusText('Loading language recognition models...');
 
-      setOcrData(data);
-      checkDuplicateBill(data.amount, data.merchant);
+      const worker = await createWorker('eng', 1, {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            const pct = Math.min(99, Math.round((m.progress || 0) * 100));
+            setOcrProgress(pct);
+            setOcrStatusText(`Recognizing receipt characters... ${pct}%`);
+          } else if (m.status === 'loading language traineddata') {
+            setOcrStatusText('Loading English vocabulary model...');
+          } else if (m.status === 'loading tesseract core') {
+            setOcrStatusText('Loading OCR engine core...');
+          }
+        },
+      });
+
+      ocrWorkerRef.current = worker;
+
+      const result = await worker.recognize(processedSrc);
+      await worker.terminate();
+      ocrWorkerRef.current = null;
+
+      const recognizedText = result?.data?.text || '';
+      setOcrRawText(recognizedText);
+
+      if (!recognizedText.trim() || recognizedText.trim().length < 4) {
+        setOcrError(
+          'No readable text detected on this bill. Please ensure good lighting, hold the camera steady close to the receipt, and avoid glare.'
+        );
+        setOcrScanning(false);
+        return;
+      }
+
+      const parsed = parseReceiptText(recognizedText, result);
+      setOcrData(parsed);
+
+      if (parsed.amount && Number(parsed.amount) > 0) {
+        checkDuplicateBill(parsed.amount, parsed.merchant);
+      }
+
+      setOcrProgress(100);
+      setOcrStatusText('Receipt successfully analyzed!');
+    } catch (err) {
+      console.error('OCR processing error:', err);
+      setOcrError(
+        'OCR recognition encountered an issue: ' + (err.message || 'Failed to process image. Please try again with a clearer photo.')
+      );
+    } finally {
       setOcrScanning(false);
-    }, 900);
+    }
   };
 
+  // Cancel in-flight OCR job
+  const handleCancelOcr = async () => {
+    if (ocrWorkerRef.current) {
+      try {
+        await ocrWorkerRef.current.terminate();
+      } catch (e) {
+        console.warn('Worker terminate error:', e);
+      }
+      ocrWorkerRef.current = null;
+    }
+    setOcrScanning(false);
+    setOcrStatusText('');
+    setOcrProgress(0);
+  };
+
+  // Save confirmed OCR transaction to MongoDB
   const handleSaveOcrTransaction = async () => {
     if (!ocrData || !ocrData.amount || Number(ocrData.amount) <= 0) {
-      setOcrError(t('enterAmountError') || 'Please enter valid amount');
+      setOcrError('Please enter a valid positive amount.');
       return;
     }
 
     try {
       setOcrSaving(true);
+      setOcrError('');
+
       if (ocrData.type === 'Sale') {
         await createSale({
           amount: Number(ocrData.amount),
           paymentMethod: ocrData.paymentMethod || 'Cash',
-          description: ocrData.description,
+          description: ocrData.description || `Scanned bill from ${ocrData.merchant || 'Customer'}`,
+          referenceNumber: ocrData.invoiceNumber || '',
+          saleDate: ocrData.billDate || new Date().toISOString(),
+          items: Array.isArray(ocrData.items) ? ocrData.items : [],
           entryMethod: 'scanned',
         });
+        setSaveSuccessMsg(
+          `Sale of ₹${Number(ocrData.amount).toLocaleString('en-IN')} for "${ocrData.merchant || 'Customer'}" recorded successfully in Transactions!`
+        );
       } else {
         await createExpense({
           amount: Number(ocrData.amount),
           category: ocrData.category || 'Stock',
           paymentMethod: ocrData.paymentMethod || 'Cash',
-          description: ocrData.description,
+          paidTo: ocrData.merchant || '',
+          description: ocrData.description || `Scanned expense from ${ocrData.merchant || 'Vendor'}`,
+          utrNumber: ocrData.invoiceNumber || '',
           entryMethod: 'scanned',
         });
+        setSaveSuccessMsg(
+          `Expense of ₹${Number(ocrData.amount).toLocaleString('en-IN')} for "${ocrData.merchant || 'Vendor'}" (${ocrData.category || 'Stock'}) recorded successfully in Transactions!`
+        );
       }
-      navigate('/transactions');
-    } catch {
-      setOcrError('Failed to save scanned transaction.');
+
+      setOcrData(null);
+      setCapturedBillUrl(null);
+      setOcrPreview(null);
+      setOcrFile(null);
+      setOcrRawText('');
+      setOcrShowConfirm(false);
+      fetchProducts();
+    } catch (err) {
+      console.error('Error saving OCR transaction:', err);
+      setOcrError(err.response?.data?.message || 'Failed to save scanned transaction. Please try again.');
     } finally {
       setOcrSaving(false);
     }
@@ -1912,278 +2204,871 @@ const ScanBill = () => {
       )}
 
       {/* =================================================================== */}
-      {/* TAB 2: OCR RECEIPT / INVOICE SCANNER                                */}
+      {/* TAB 2: LIVE CAMERA BILL SCANNER & REAL OCR RECEIPT INGESTION        */}
       {/* =================================================================== */}
       {activeTab === 'ocrBill' && (
         <div className="pos-scan-grid">
           <div className="scanner-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(2, 132, 199, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
-                <FileText size={16} />
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(2, 132, 199, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                    Live Camera Bill Scanner & Real OCR
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    Live document viewfinder, Tesseract.js character recognition & ledger saving
+                  </span>
+                </div>
               </div>
-              <div>
-                <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a', margin: 0 }}>
-                  Smart OCR Receipt & Bill Ingestion
-                </h3>
-                <span style={{ fontSize: '12px', color: '#64748b' }}>
-                  Auto-extract expense totals, vendor names, and electricity slips
-                </span>
-              </div>
+
+              {/* Sub-Mode Switcher */}
+              {!ocrData && !ocrPreview && (
+                <div className="scanner-mode-switch" style={{ width: 'auto' }}>
+                  <button
+                    type="button"
+                    className={`scanner-mode-btn ${billScannerMode === 'camera' ? 'active' : ''}`}
+                    onClick={() => {
+                      setBillScannerMode('camera');
+                      setBillCameraError('');
+                    }}
+                  >
+                    <Camera size={14} />
+                    <span>Live Camera</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`scanner-mode-btn ${billScannerMode === 'upload' ? 'active' : ''}`}
+                    onClick={() => {
+                      setBillScannerMode('upload');
+                      stopBillCamera();
+                    }}
+                  >
+                    <Upload size={14} />
+                    <span>Upload Image</span>
+                  </button>
+                </div>
+              )}
             </div>
 
+            {/* Error Notification */}
             {ocrError && (
-              <div style={{ backgroundColor: '#fff1f2', border: '1px solid #fda4af', borderRadius: '8px', padding: '10px 14px', color: '#9f1239', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <XCircle size={15} />
+              <div style={{ backgroundColor: '#fff1f2', border: '1px solid #fda4af', borderRadius: '10px', padding: '10px 14px', color: '#9f1239', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <XCircle size={16} style={{ flexShrink: 0 }} />
                 <span>{ocrError}</span>
               </div>
             )}
 
-            {!ocrData && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {ocrPreview ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                    <img src={ocrPreview} alt="Receipt preview" style={{ maxHeight: '200px', borderRadius: '8px', objectFit: 'contain' }} />
-                    <div style={{ display: 'flex', gap: '10px' }}>
+            {/* STATE 1: LIVE CAMERA CAPTURE / UPLOAD SCREEN (when no image selected) */}
+            {!ocrData && !ocrPreview && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* 1A: LIVE CAMERA SCANNER */}
+                {billScannerMode === 'camera' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* Live Camera Viewfinder with Document Alignment Guide */}
+                    <div className="bill-viewfinder-container">
+                      <video
+                        ref={billVideoRef}
+                        className="bill-video-stream"
+                        autoPlay
+                        playsInline
+                        muted
+                      />
+
+                      {/* Document Alignment Frame */}
+                      {isBillCameraRunning && (
+                        <div className="document-guide-overlay">
+                          <div className="document-guide-box">
+                            <span className="guide-corner-tl" />
+                            <span className="guide-corner-tr" />
+                            <span className="guide-corner-bl" />
+                            <span className="guide-corner-br" />
+                            <span className="guide-center-scanner-line" />
+                          </div>
+                          <span style={{ marginTop: '10px', color: '#ffffff', fontSize: '11px', fontWeight: '700', textShadow: '0 1px 4px rgba(0,0,0,0.8)', backgroundColor: 'rgba(15, 23, 42, 0.75)', padding: '3px 10px', borderRadius: '999px' }}>
+                            Align bill or receipt edges inside the blue frame
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Loading or Inactive States */}
+                      {isBillCameraStarting && (
+                        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#38bdf8' }}>
+                          <RefreshCw size={28} className="spin" />
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff' }}>Connecting to Camera...</span>
+                        </div>
+                      )}
+
+                      {!isBillCameraRunning && !isBillCameraStarting && (
+                        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#94a3b8', padding: '20px', textAlign: 'center' }}>
+                          <CameraOff size={32} color="#64748b" />
+                          <span style={{ fontSize: '13px', color: '#e2e8f0', fontWeight: '700' }}>Camera is currently idle</span>
+                          <button
+                            type="button"
+                            onClick={startBillCamera}
+                            style={{ backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            Start Camera
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Camera Action Buttons Bar */}
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        onClick={handleRunOcrScan}
-                        disabled={ocrScanning}
+                        onClick={captureBillFrame}
+                        disabled={!isBillCameraRunning || !billVideoReady}
+                        style={{
+                          flex: 1,
+                          minWidth: '180px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          backgroundColor: isBillCameraRunning && billVideoReady ? '#0284c7' : '#94a3b8',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          padding: '12px 20px',
+                          fontSize: '14px',
+                          fontWeight: '800',
+                          cursor: isBillCameraRunning && billVideoReady ? 'pointer' : 'not-allowed',
+                          boxShadow: '0 4px 12px rgba(2, 132, 199, 0.25)',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <Camera size={18} />
+                        <span>Capture Bill Photo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBillFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
-                          backgroundColor: '#0284c7',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          padding: '8px 16px',
-                          fontSize: '13px',
+                          backgroundColor: '#f1f5f9',
+                          color: '#334155',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '10px',
+                          padding: '12px 14px',
+                          fontSize: '12px',
                           fontWeight: '700',
                           cursor: 'pointer',
                         }}
+                        title="Toggle front and rear camera lens"
                       >
-                        {ocrScanning ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
-                        <span>{ocrScanning ? 'Extracting with OCR...' : 'Process with OCR Vision'}</span>
+                        <RotateCcw size={14} />
+                        <span>Flip ({billFacingMode === 'environment' ? 'Rear' : 'Front'})</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOcrFile(null);
-                          setOcrPreview(null);
-                        }}
-                        style={{ background: 'none', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 14px', fontSize: '12px', color: '#64748b', cursor: 'pointer' }}
-                      >
-                        Choose Different Image
-                      </button>
+
+                      {isBillCameraRunning ? (
+                        <button
+                          type="button"
+                          onClick={stopBillCamera}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: '#fef2f2',
+                            color: '#b91c1c',
+                            border: '1px solid #fecaca',
+                            borderRadius: '10px',
+                            padding: '12px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <CameraOff size={14} />
+                          <span>Stop</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startBillCamera}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: '#f0fdf4',
+                            color: '#15803d',
+                            border: '1px solid #bbf7d0',
+                            borderRadius: '10px',
+                            padding: '12px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Camera size={14} />
+                          <span>Start</span>
+                        </button>
+                      )}
                     </div>
+
+                    {/* Camera Error Message with Helpful Browser Instructions */}
+                    {billCameraError && (
+                      <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '14px', color: '#9a3412', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', fontSize: '13px' }}>
+                          <AlertTriangle size={16} color="#ea580c" />
+                          <span>Camera Access Issue</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.5 }}>
+                          {billCameraError}
+                        </p>
+                        <div style={{ fontSize: '11px', color: '#7c2d12', backgroundColor: 'rgba(255,255,255,0.7)', padding: '8px 10px', borderRadius: '8px' }}>
+                          <strong>How to resolve:</strong>
+                          <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
+                            <li>Click the <strong>camera / padlock icon</strong> on the left side of your browser URL bar.</li>
+                            <li>Change the Camera permission setting to <strong>"Allow"</strong>.</li>
+                            <li>Or switch to <strong>Upload Image</strong> mode to pick any receipt photo from your files.</li>
+                          </ul>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBillScannerMode('upload');
+                              setBillCameraError('');
+                            }}
+                            style={{ backgroundColor: '#ea580c', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            Switch to Upload Image
+                          </button>
+                          <button
+                            type="button"
+                            onClick={startBillCamera}
+                            style={{ backgroundColor: '#ffffff', color: '#9a3412', border: '1px solid #fdba74', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            Retry Camera
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                )}
+
+                {/* 1B: FILE UPLOAD MODE */}
+                {billScannerMode === 'upload' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <label
                       style={{
-                        border: '2px dashed #cbd5e1',
-                        borderRadius: '12px',
-                        padding: '24px',
+                        border: '2px dashed #0284c7',
+                        borderRadius: '14px',
+                        padding: '36px 20px',
                         textAlign: 'center',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '8px',
+                        gap: '10px',
                         cursor: 'pointer',
-                        backgroundColor: '#f8fafc',
+                        backgroundColor: 'rgba(2, 132, 199, 0.03)',
+                        transition: 'background-color 0.2s',
                       }}
                     >
-                      <Upload size={24} color="#0284c7" />
-                      <strong style={{ fontSize: '13px', color: '#1e293b' }}>Click to select receipt or invoice image</strong>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>Supports grocery invoices, electricity bills, supplier slips</span>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(2, 132, 199, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                        <Upload size={24} />
+                      </div>
+                      <strong style={{ fontSize: '14px', color: '#0f172a' }}>
+                        Click or drag & drop receipt / invoice image
+                      </strong>
+                      <span style={{ fontSize: '12px', color: '#64748b', maxWidth: '380px' }}>
+                        Supports grocery tax invoices, electricity EB slips, wholesale trader bills, fuel receipts (PNG, JPG, WEBP)
+                      </span>
                       <input type="file" accept="image/*" onChange={handleOcrFileSelect} hidden />
                     </label>
-
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        padding: '10px',
-                        borderRadius: '10px',
-                        border: '1.5px dashed #0284c7',
-                        backgroundColor: 'rgba(2, 132, 199, 0.05)',
-                        color: '#0284c7',
-                        fontSize: '13px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Camera size={16} />
-                      <span>Take Photo with Camera</span>
-                      <input type="file" accept="image/*" capture="environment" onChange={handleOcrFileSelect} hidden />
-                    </label>
-                  </div>
-                )}
-
-                {/* Sample Receipts */}
-                {!ocrPreview && (
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
-                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', display: 'block', marginBottom: '8px' }}>
-                      Try Demo Receipt Slips:
-                    </span>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleSampleReceipt('electricity')}
-                        style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
-                      >
-                        ⚡ Power Bill (₹1,450)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSampleReceipt('stock')}
-                        style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
-                      >
-                        📦 Wholesale Stock (₹8,250)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSampleReceipt('sale')}
-                        style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
-                      >
-                        🧾 Counter Sale (₹3,200)
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* OCR Detection Card */}
-            {ocrData && (
-              <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', color: '#065f46', fontSize: '14px' }}>
-                    <CheckCircle2 size={16} color="#10b981" />
-                    <span>OCR Extracted Receipt</span>
+            {/* STATE 2: CAPTURED / SELECTED IMAGE PREVIEW & OCR PROCESSING */}
+            {ocrPreview && !ocrData && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#f8fafc', borderRadius: '14px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                    <FileText size={16} color="#0284c7" />
+                    <span>Captured Bill Image</span>
                   </div>
-                  <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
-                    Confidence: {ocrData.confidence || '98%'}
-                  </span>
+
+                  {/* Preprocessing & Rotation Controls */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => rotateCapturedBill(90)}
+                      disabled={ocrScanning}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        padding: '5px 10px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        color: '#334155',
+                        cursor: 'pointer',
+                      }}
+                      title="Rotate image 90 degrees clockwise"
+                    >
+                      <RotateCw size={12} />
+                      <span>Rotate 90°</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEnhanceContrast(!enhanceContrast)}
+                      disabled={ocrScanning}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        backgroundColor: enhanceContrast ? '#e0f2fe' : '#ffffff',
+                        border: enhanceContrast ? '1px solid #38bdf8' : '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        padding: '5px 10px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        color: enhanceContrast ? '#0284c7' : '#334155',
+                        cursor: 'pointer',
+                      }}
+                      title="Optimize grayscale contrast for faded thermal receipts"
+                    >
+                      <SlidersHorizontal size={12} />
+                      <span>{enhanceContrast ? 'Contrast: ON' : 'Contrast: OFF'}</span>
+                    </button>
+                  </div>
                 </div>
 
+                {/* Bill Image View */}
+                <div style={{ display: 'flex', justifyContent: 'center', backgroundColor: '#020617', borderRadius: '10px', padding: '10px', maxHeight: '340px', overflow: 'hidden' }}>
+                  <img
+                    src={ocrPreview}
+                    alt="Receipt preview"
+                    style={{
+                      maxHeight: '320px',
+                      maxWidth: '100%',
+                      objectFit: 'contain',
+                      borderRadius: '6px',
+                    }}
+                  />
+                </div>
+
+                {/* Real-time OCR Progress Bar */}
+                {ocrScanning && (
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: '700', color: '#0369a1' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <RefreshCw size={14} className="spin" />
+                        <span>{ocrStatusText || 'Recognizing receipt text with Tesseract.js...'}</span>
+                      </div>
+                      <span>{ocrProgress}%</span>
+                    </div>
+
+                    <div className="ocr-progress-track">
+                      <div className="ocr-progress-fill" style={{ width: `${ocrProgress}%` }} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={handleCancelOcr}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                      >
+                        Cancel OCR
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                {!ocrScanning && (
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={handleRunRealOcr}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        backgroundColor: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '12px 20px',
+                        fontSize: '13px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(2, 132, 199, 0.25)',
+                      }}
+                    >
+                      <Sparkles size={16} />
+                      <span>Process with Real OCR Vision</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOcrFile(null);
+                        setOcrPreview(null);
+                        setCapturedBillUrl(null);
+                        setOcrError('');
+                        if (billScannerMode === 'camera') {
+                          startBillCamera();
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: '#475569',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Retake / Retract
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STATE 3: OCR EXTRACTION REVIEW & CONFIRMATION SCREEN */}
+            {ocrData && (
+              <div style={{ backgroundColor: '#ffffff', border: '1.5px solid #86efac', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 6px 20px rgba(16, 185, 129, 0.08)' }}>
+                {/* Header with Real Tesseract Confidence */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', color: '#065f46', fontSize: '15px' }}>
+                    <CheckCircle2 size={18} color="#10b981" />
+                    <span>Receipt Parsed Successfully</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: '999px', fontWeight: '700' }}>
+                      {ocrData.confidence > 0 ? `Text Confidence: ${ocrData.confidence}%` : 'Extracted via OCR'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOcrData(null);
+                        setOcrPreview(null);
+                        setCapturedBillUrl(null);
+                        setOcrFile(null);
+                        setOcrRawText('');
+                        setOcrShowConfirm(false);
+                        if (billScannerMode === 'camera') startBillCamera();
+                      }}
+                      style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      ✕ Discard
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mathematical Validation Note Alert */}
+                {ocrData.validationNotes && ocrData.validationNotes.length > 0 && (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px 12px', color: '#166534', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={14} color="#16a34a" style={{ flexShrink: 0 }} />
+                    <span>{ocrData.validationNotes.join(' ')}</span>
+                  </div>
+                )}
+
+                {/* Duplicate Bill Warning */}
                 {ocrDuplicateWarning && (
-                  <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '8px', padding: '8px 12px', color: '#92400e', fontSize: '12px', display: 'flex', gap: '6px' }}>
-                    <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                  <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '8px', padding: '10px 12px', color: '#92400e', fontSize: '12px', display: 'flex', gap: '8px' }}>
+                    <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
                     <span>{ocrDuplicateWarning}</span>
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* Type Selector (Expense vs Sale) */}
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                    Transaction Flow Type:
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setOcrData({ ...ocrData, type: 'Expense' })}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: ocrData.type === 'Expense' ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                        backgroundColor: ocrData.type === 'Expense' ? '#fef2f2' : '#ffffff',
+                        color: ocrData.type === 'Expense' ? '#b91c1c' : '#475569',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Minus size={14} />
+                      <span>Expense (Outflow / Purchase)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setOcrData({ ...ocrData, type: 'Sale' })}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: ocrData.type === 'Sale' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                        backgroundColor: ocrData.type === 'Sale' ? '#ecfdf5' : '#ffffff',
+                        color: ocrData.type === 'Sale' ? '#047857' : '#475569',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>Sale (Inflow / Customer Receipt)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editable Fields Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  {/* Merchant / Vendor */}
                   <div>
-                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>Merchant / Vendor</label>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>
+                      {ocrData.type === 'Sale' ? 'Customer / Sold To' : 'Merchant / Vendor / Supplier'}
+                    </label>
                     <input
                       type="text"
-                      value={ocrData.merchant}
-                      onChange={(e) => setOcrData({ ...ocrData, merchant: e.target.value })}
-                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                      placeholder="e.g. Sri Meenakshi Traders"
+                      value={ocrData.merchant || ''}
+                      onChange={(e) => {
+                        const updated = { ...ocrData, merchant: e.target.value };
+                        setOcrData(updated);
+                        if (updated.amount) checkDuplicateBill(updated.amount, e.target.value);
+                      }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     />
                   </div>
 
+                  {/* Bill Date */}
                   <div>
-                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>Type</label>
-                    <select
-                      value={ocrData.type}
-                      onChange={(e) => setOcrData({ ...ocrData, type: e.target.value })}
-                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
-                    >
-                      <option value="Expense">Expense (Outflow)</option>
-                      <option value="Sale">Sale (Inflow)</option>
-                    </select>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>
+                      Bill / Invoice Date
+                    </label>
+                    <input
+                      type="date"
+                      value={ocrData.billDate || ''}
+                      onChange={(e) => setOcrData({ ...ocrData, billDate: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    />
                   </div>
 
+                  {/* Invoice / Reference Number */}
                   <div>
-                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>Amount (₹)</label>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>
+                      Invoice / Bill #
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. INV-2024-904"
+                      value={ocrData.invoiceNumber || ''}
+                      onChange={(e) => setOcrData({ ...ocrData, invoiceNumber: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    />
+                  </div>
+
+                  {/* Total Amount */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#047857', display: 'block', marginBottom: '3px' }}>
+                      Total Amount (₹) *
+                    </label>
                     <input
                       type="number"
-                      value={ocrData.amount}
-                      onChange={(e) => setOcrData({ ...ocrData, amount: e.target.value })}
-                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: '800' }}
+                      step="any"
+                      placeholder="0.00"
+                      value={ocrData.amount || ''}
+                      onChange={(e) => {
+                        const updated = { ...ocrData, amount: e.target.value };
+                        setOcrData(updated);
+                        if (e.target.value) checkDuplicateBill(e.target.value, updated.merchant);
+                      }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '2px solid #10b981', fontSize: '15px', fontWeight: '800', color: '#065f46' }}
                     />
                   </div>
 
+                  {/* Category or Payment Method depending on type */}
                   {ocrData.type === 'Expense' ? (
                     <div>
-                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>Category</label>
+                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>
+                        Expense Category
+                      </label>
                       <select
-                        value={ocrData.category}
+                        value={ocrData.category || 'Stock'}
                         onChange={(e) => setOcrData({ ...ocrData, category: e.target.value })}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
                       >
-                        <option value="Stock">Stock</option>
-                        <option value="Rent">Rent</option>
-                        <option value="Electricity">Electricity</option>
+                        <option value="Stock">Stock (Inventory Purchase)</option>
+                        <option value="Rent">Shop Rent</option>
+                        <option value="Electricity">Electricity / Power</option>
                         <option value="Salary">Staff Salary</option>
-                        <option value="Transport">Transport</option>
-                        <option value="Other">Other</option>
+                        <option value="Transport">Transport / Logistics</option>
+                        <option value="Other">Other Expenses</option>
                       </select>
                     </div>
-                  ) : (
+                  ) : null}
+
+                  {/* Payment Method */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>
+                      Payment Method
+                    </label>
+                    <select
+                      value={ocrData.paymentMethod || 'Cash'}
+                      onChange={(e) => setOcrData({ ...ocrData, paymentMethod: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="UPI">UPI (GPay / PhonePe / QR)</option>
+                      {ocrData.type === 'Sale' && <option value="GPay">Google Pay (GPay)</option>}
+                      {ocrData.type === 'Sale' && <option value="PhonePe">PhonePe</option>}
+                      <option value="Card">Card (Debit / Credit)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Subtotal, Tax, Discount breakdown (if detected) */}
+                {(ocrData.subtotal || ocrData.tax || ocrData.discount) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                     <div>
-                      <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '3px' }}>Payment Method</label>
-                      <select
-                        value={ocrData.paymentMethod}
-                        onChange={(e) => setOcrData({ ...ocrData, paymentMethod: e.target.value })}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                      <span style={{ fontSize: '10px', color: '#64748b', display: 'block' }}>Subtotal (Taxable)</span>
+                      <strong style={{ fontSize: '12px', color: '#334155' }}>
+                        ₹{ocrData.subtotal || '0.00'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748b', display: 'block' }}>Tax / GST</span>
+                      <strong style={{ fontSize: '12px', color: '#334155' }}>
+                        ₹{ocrData.tax || '0.00'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#64748b', display: 'block' }}>Discount</span>
+                      <strong style={{ fontSize: '12px', color: '#334155' }}>
+                        ₹{ocrData.discount || '0.00'}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* Line Items Table (if any were recognized) */}
+                {Array.isArray(ocrData.items) && ocrData.items.length > 0 && (
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                      Identified Line Items ({ocrData.items.length}):
+                    </span>
+                    <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
+                            <th style={{ padding: '6px 10px' }}>Description</th>
+                            <th style={{ padding: '6px 10px' }}>Qty</th>
+                            <th style={{ padding: '6px 10px' }}>Rate</th>
+                            <th style={{ padding: '6px 10px' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ocrData.items.map((it, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '6px 10px', fontWeight: '600' }}>{it.name}</td>
+                              <td style={{ padding: '6px 10px' }}>{it.quantity}</td>
+                              <td style={{ padding: '6px 10px' }}>₹{it.unitPrice}</td>
+                              <td style={{ padding: '6px 10px', fontWeight: '700' }}>₹{it.total}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Raw OCR Text Accordion (Debugging and Transparency) */}
+                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowRawText(!showRawText)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#0284c7',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: 0,
+                      }}
+                    >
+                      {showRawText ? <EyeOff size={12} /> : <Eye size={12} />}
+                      <span>{showRawText ? 'Hide Raw OCR Text' : 'Inspect Raw OCR Recognized Text'}</span>
+                    </button>
+
+                    {showRawText && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (ocrRawText) {
+                            navigator.clipboard.writeText(ocrRawText);
+                            setCopiedRawText(true);
+                            setTimeout(() => setCopiedRawText(false), 2000);
+                          }
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: copiedRawText ? '#10b981' : '#64748b',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
                       >
-                        <option value="Cash">Cash</option>
-                        <option value="UPI">UPI</option>
-                        <option value="Card">Card</option>
-                      </select>
+                        <Copy size={12} />
+                        <span>{copiedRawText ? 'Copied!' : 'Copy Text'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {showRawText && (
+                    <div style={{ marginTop: '8px', maxHeight: '160px', overflowY: 'auto', backgroundColor: '#0f172a', borderRadius: '8px', padding: '10px', color: '#38bdf8', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                      {ocrRawText || 'No raw text stored.'}
                     </div>
                   )}
                 </div>
 
+                {/* Save Confirmation Dialog / Action Button */}
                 {ocrShowConfirm ? (
-                  <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', padding: '12px', border: '1px solid #86efac', textAlign: 'center' }}>
-                    <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '700', color: '#065f46' }}>
-                      Confirm adding ₹{ocrData.amount} as a {ocrData.type} for "{ocrData.merchant}" to Transactions?
+                  <div style={{ backgroundColor: '#f0fdf4', borderRadius: '10px', padding: '14px', border: '1.5px solid #86efac', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '800', color: '#065f46' }}>
+                      Record ₹{ocrData.amount} as a {ocrData.type} for "{ocrData.merchant || 'Unknown'}" on {ocrData.billDate}?
                     </p>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <button
                         type="button"
                         onClick={handleSaveOcrTransaction}
                         disabled={ocrSaving}
-                        style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 16px', fontSize: '13px', fontWeight: '800', cursor: 'pointer' }}
+                        style={{
+                          backgroundColor: '#10b981',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '10px 20px',
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          cursor: ocrSaving ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
                       >
-                        {ocrSaving ? 'Saving...' : 'Yes, Save to Ledger'}
+                        {ocrSaving ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={16} />}
+                        <span>{ocrSaving ? 'Recording to Ledger...' : 'Confirm & Save Transaction'}</span>
                       </button>
+
                       <button
                         type="button"
                         onClick={() => setOcrShowConfirm(false)}
-                        style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer' }}
+                        disabled={ocrSaving}
+                        style={{
+                          backgroundColor: '#f1f5f9',
+                          color: '#475569',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                        }}
                       >
-                        Edit
+                        Back to Edit
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                       type="button"
-                      onClick={() => setOcrShowConfirm(true)}
-                      style={{ flex: 1, backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      onClick={() => {
+                        if (!ocrData.amount || Number(ocrData.amount) <= 0) {
+                          setOcrError('Please enter a valid total amount before saving.');
+                          return;
+                        }
+                        setOcrShowConfirm(true);
+                      }}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#10b981',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        fontSize: '13px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                      }}
                     >
                       <CheckCircle2 size={16} />
-                      <span>Review & Save Bill</span>
+                      <span>Review & Save Bill to Ledger</span>
                     </button>
+
                     <button
                       type="button"
                       onClick={() => {
                         setOcrData(null);
-                        setOcrFile(null);
                         setOcrPreview(null);
+                        setCapturedBillUrl(null);
+                        setOcrFile(null);
+                        setOcrRawText('');
+                        setOcrShowConfirm(false);
+                        if (billScannerMode === 'camera') startBillCamera();
                       }}
-                      style={{ backgroundColor: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                      style={{
+                        backgroundColor: '#f1f5f9',
+                        color: '#64748b',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                      }}
                     >
-                      Discard
+                      Scan Another
                     </button>
                   </div>
                 )}
@@ -2194,18 +3079,31 @@ const ScanBill = () => {
           {/* Right Info Sidebar */}
           <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '30px', height: '30px', borderRadius: '6px', backgroundColor: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
                 <Sparkles size={16} />
               </div>
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>OCR Vision Highlights</h4>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>Real OCR Vision Ingestion</h4>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>Client-Side Computer Vision</span>
+              </div>
             </div>
 
             <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569', lineHeight: 1.7 }}>
-              <li>Automatically detects vendor names from invoices</li>
-              <li>Calculates GST & totals from handwritten or printed slips</li>
-              <li>Alerts if an invoice with identical amount was already registered</li>
-              <li>Syncs directly into the profit and loss ledger</li>
+              <li><strong>Live Camera Capture:</strong> Targets bills with alignment frame overlay & rear camera lens selection.</li>
+              <li><strong>Real OCR Engine:</strong> Client-side Tesseract.js recognizes printed characters directly in browser.</li>
+              <li><strong>Smart Field Extraction:</strong> Extracts merchant, invoice #, bill date, subtotal, tax, and grand total.</li>
+              <li><strong>Duplicate Detection:</strong> Alerts if an invoice with matching amount was previously recorded.</li>
+              <li><strong>Financial Ledger Sync:</strong> Saves directly into your MongoDB sales or expense transactions.</li>
             </ul>
+
+            <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <strong style={{ fontSize: '11px', color: '#166534' }}>💡 Scanning Tips for Crisp OCR:</strong>
+              <span style={{ fontSize: '11px', color: '#15803d', lineHeight: 1.5 }}>
+                • Flatten thermal receipts before shooting.<br />
+                • Keep camera steady at 15–25 cm distance.<br />
+                • Toggle "Contrast: ON" for faint printouts.
+              </span>
+            </div>
           </div>
         </div>
       )}

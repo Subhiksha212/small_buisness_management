@@ -3112,6 +3112,142 @@ body {
   gap: 6px;
 }
 
+/* ========================================== */
+/* BILL CAMERA & REAL OCR STYLES              */
+/* ========================================== */
+.bill-viewfinder-container {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #020617;
+  min-height: 380px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bill-video-stream {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  max-height: 520px;
+  object-fit: cover;
+  display: block;
+}
+
+.document-guide-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.05) 50%, rgba(0, 0, 0, 0.6) 100%);
+}
+
+.document-guide-box {
+  position: relative;
+  width: 82%;
+  height: 78%;
+  max-width: 440px;
+  max-height: 360px;
+  border: 1.5px dashed rgba(56, 189, 248, 0.6);
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.guide-corner-tl {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 24px;
+  height: 24px;
+  border-top: 3.5px solid #38bdf8;
+  border-left: 3.5px solid #38bdf8;
+  border-top-left-radius: 12px;
+}
+
+.guide-corner-tr {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 24px;
+  height: 24px;
+  border-top: 3.5px solid #38bdf8;
+  border-right: 3.5px solid #38bdf8;
+  border-top-right-radius: 12px;
+}
+
+.guide-corner-bl {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  width: 24px;
+  height: 24px;
+  border-bottom: 3.5px solid #38bdf8;
+  border-left: 3.5px solid #38bdf8;
+  border-bottom-left-radius: 12px;
+}
+
+.guide-corner-br {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 24px;
+  height: 24px;
+  border-bottom: 3.5px solid #38bdf8;
+  border-right: 3.5px solid #38bdf8;
+  border-bottom-right-radius: 12px;
+}
+
+.guide-center-scanner-line {
+  position: absolute;
+  top: 50%;
+  left: 5%;
+  right: 5%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+  box-shadow: 0 0 12px #0284c7;
+  animation: billScanSweep 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes billScanSweep {
+  0% {
+    top: 15%;
+    opacity: 0.4;
+  }
+  100% {
+    top: 85%;
+    opacity: 0.9;
+  }
+}
+
+.ocr-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 10px 0 6px;
+}
+
+.ocr-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+
 
 
 
