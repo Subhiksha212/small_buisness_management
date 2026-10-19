@@ -2,7 +2,34 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
-import illustration from '../assets/login_illustration.jpg';
+
+// Modern 3D isometric faceted cube logo matching the user's reference design
+const SmartBusinessLogo = () => (
+  <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="cubeTop" x1="6" y1="4" x2="26" y2="14" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#F1F5F9" />
+        <stop offset="1" stopColor="#93C5FD" />
+      </linearGradient>
+      <linearGradient id="cubeLeft" x1="4" y1="12" x2="16" y2="28" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#60A5FA" />
+        <stop offset="1" stopColor="#1E40AF" />
+      </linearGradient>
+      <linearGradient id="cubeRight" x1="16" y1="12" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#334155" />
+        <stop offset="1" stopColor="#0F172A" />
+      </linearGradient>
+    </defs>
+    {/* Top diamond facet */}
+    <path d="M16 3L27.5 9.5L16 16L4.5 9.5L16 3Z" fill="url(#cubeTop)" />
+    {/* Left facet */}
+    <path d="M4.5 11L15 17V29.5L4.5 23.5V11Z" fill="url(#cubeLeft)" />
+    {/* Right facet */}
+    <path d="M17 17L27.5 11V23.5L17 29.5V17Z" fill="url(#cubeRight)" />
+    {/* Subtle geometric dividing seam */}
+    <path d="M16 16V29.5" stroke="rgba(15, 23, 42, 0.4)" strokeWidth="1" />
+  </svg>
+);
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -46,75 +73,92 @@ const Login = () => {
   };
 
   return (
-    <div className="login-template-container">
-      <div className="login-template-left">
-        <div className="login-template-brand">
-          Smart Business
+    <div className="smart-auth-page">
+      <div className="smart-auth-card">
+        {/* Brand Header */}
+        <div className="smart-auth-brand">
+          <SmartBusinessLogo />
+          <div className="smart-auth-brand-text">
+            <span className="brand-smart">SMART</span>
+            <span className="brand-business">BUSINESS</span>
+          </div>
         </div>
 
-        <div className="login-template-form-wrapper">
-          <h1>Login</h1>
-          <p className="login-template-subtitle">Welcome to log in to your background management system.</p>
+        {/* Title & Subtitle */}
+        <h1 className="smart-auth-title">Login</h1>
+        <p className="smart-auth-subtitle">
+          Welcome to log in to your background management system
+        </p>
 
-          {error && (
-            <div className="auth-error-banner" style={{ fontSize: '12px', padding: '10px', marginBottom: '24px' }}>
-              <AlertCircle size={16} />
-              <span>{error}</span>
-            </div>
-          )}
+        {/* Error notification banner */}
+        {error && (
+          <div className="smart-auth-error">
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            <span>{error}</span>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="login-template-input-group">
-              <label>Email</label>
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="smart-auth-form">
+          <div className="smart-auth-field">
+            <label className="smart-auth-label">EMAIL</label>
+            <div className="smart-auth-input-wrapper">
               <input
                 type="email"
-                className="login-template-input"
-                placeholder="Enter your email"
+                className="smart-auth-input"
+                placeholder="user212@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
               />
             </div>
+          </div>
 
-            <div className="login-template-input-group">
-              <label>Password</label>
+          <div className="smart-auth-field">
+            <label className="smart-auth-label">PASSWORD</label>
+            <div className="smart-auth-input-wrapper">
               <input
                 type={showPassword ? 'text' : 'password'}
-                className="login-template-input"
-                placeholder="Enter your password"
+                className="smart-auth-input has-eye"
+                placeholder="••••••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
               />
               <button
                 type="button"
-                className="login-template-eye-icon"
+                className="smart-auth-eye-btn"
                 onClick={() => setShowPassword(!showPassword)}
                 tabIndex="-1"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
-            
-            <div style={{ textAlign: 'right', marginTop: '-12px', marginBottom: '16px' }}>
-              <Link to="/forgot-password" style={{ color: '#3b82f6', textDecoration: 'none', fontSize: '12px', fontWeight: 600 }}>
-                Forgot Password?
-              </Link>
-            </div>
-
-            <button type="submit" className="login-template-btn" disabled={isSubmitting}>
-              {isSubmitting ? 'Logging in...' : 'LOGIN'}
-            </button>
-          </form>
-          
-          <div style={{ marginTop: '32px', fontSize: '12px', color: '#94a3b8' }}>
-            Don't have an account? <Link to="/signup" style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>Sign up</Link>
           </div>
-        </div>
-      </div>
 
-      <div className="login-template-right">
-        <img src={illustration} alt="Dashboard Illustration" className="login-template-illustration" />
+          {/* Forgot Password Link */}
+          <div className="smart-auth-forgot">
+            <Link to="/forgot-password" className="smart-auth-forgot-link">
+              Forgot Password?
+            </Link>
+          </div>
+
+          {/* Login Submit Button */}
+          <button type="submit" className="smart-auth-btn" disabled={isSubmitting}>
+            {isSubmitting ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+
+        {/* Sign up prompt footer */}
+        <div className="smart-auth-footer">
+          Don't have an account?{' '}
+          <Link to="/signup" className="smart-auth-footer-link">
+            Sign up
+          </Link>
+        </div>
       </div>
     </div>
   );

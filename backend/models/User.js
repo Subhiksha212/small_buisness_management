@@ -57,6 +57,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: 'Razorpay',
     },
+    resetPasswordOtp: {
+      type: String,
+      default: null,
+    },
+    resetPasswordOtpExpires: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -71,7 +79,7 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 // Password hashing pre-save hook
 userSchema.pre('save', async function (next) {
   if (!this.isModified('passwordHash')) {
-    next();
+    return next();
   }
   const salt = await bcrypt.genSalt(10);
   this.passwordHash = await bcrypt.hash(this.passwordHash, salt);

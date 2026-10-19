@@ -71,6 +71,16 @@ export const updateOnboardingApi = async (setupData) => {
   return response.data;
 };
 
+export const sendForgotPasswordOtpApi = async ({ email }) => {
+  const response = await api.post('/auth/forgot-password/send-otp', { email });
+  return response.data;
+};
+
+export const verifyForgotPasswordOtpApi = async ({ email, otp, newPassword }) => {
+  const response = await api.post('/auth/forgot-password/verify-otp', { email, otp, newPassword });
+  return response.data;
+};
+
 // Existing Endpoints (Data strictly scoped on server)
 export const getDashboardData = async (period = 'all', startDate = '', endDate = '') => {
   const response = await api.get('/dashboard', {

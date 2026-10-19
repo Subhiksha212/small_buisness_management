@@ -2305,6 +2305,324 @@ body {
 }
 
 /* ========================================================
+   SMART BUSINESS GLASSMORPHISM AUTH STYLES (EXACT LOGIN DESIGN)
+   ======================================================== */
+.smart-auth-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #060b19;
+  background-image: 
+    radial-gradient(circle at 18% 22%, rgba(59, 130, 246, 0.22) 0%, transparent 42%),
+    radial-gradient(circle at 82% 38%, rgba(14, 165, 233, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 70% 82%, rgba(139, 92, 246, 0.16) 0%, transparent 40%),
+    radial-gradient(circle at 35% 85%, rgba(37, 99, 235, 0.14) 0%, transparent 42%);
+  background-attachment: fixed;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.smart-auth-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(30, 58, 138, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.smart-auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 410px;
+  background: rgba(13, 22, 42, 0.72);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 20px;
+  box-shadow: 
+    0 25px 60px -15px rgba(0, 0, 0, 0.75),
+    0 0 35px rgba(37, 99, 235, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.12);
+  padding: 38px 32px 34px;
+  box-sizing: border-box;
+  z-index: 1;
+  text-align: center;
+  animation: smartAuthFadeIn 0.35s ease-out;
+}
+
+@keyframes smartAuthFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.smart-auth-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  user-select: none;
+}
+
+.smart-auth-brand-text {
+  font-size: 17px;
+  letter-spacing: 0.8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.smart-auth-brand-text .brand-smart {
+  color: #ffffff;
+}
+
+.smart-auth-brand-text .brand-business {
+  color: #2563eb;
+  margin-left: 5px;
+}
+
+.smart-auth-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.3px;
+}
+
+.smart-auth-subtitle {
+  font-size: 12.5px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0 auto 28px auto;
+  max-width: 290px;
+}
+
+.smart-auth-form {
+  text-align: left;
+}
+
+.smart-auth-field {
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.smart-auth-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.smart-auth-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.smart-auth-input {
+  width: 100%;
+  background: rgba(16, 28, 52, 0.65);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #ffffff;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.smart-auth-input::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+.smart-auth-input:hover {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(19, 33, 62, 0.7);
+}
+
+.smart-auth-input:focus {
+  border-color: #3b82f6;
+  background: rgba(22, 38, 72, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25), 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.smart-auth-input.has-eye {
+  padding-right: 46px;
+}
+
+.smart-auth-eye-btn {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.smart-auth-eye-btn:hover {
+  color: #38bdf8;
+}
+
+.smart-auth-forgot {
+  text-align: right;
+  margin-top: 8px;
+  margin-bottom: 22px;
+}
+
+.smart-auth-forgot-link {
+  font-size: 12px;
+  color: #93c5fd;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.smart-auth-forgot-link:hover {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.smart-auth-btn {
+  width: 100%;
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border: 1px solid rgba(147, 197, 253, 0.25);
+  border-radius: 12px;
+  padding: 13px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.smart-auth-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.6);
+  transform: translateY(-1px);
+}
+
+.smart-auth-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.smart-auth-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.smart-auth-footer {
+  margin-top: 24px;
+  font-size: 12.5px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.smart-auth-footer-link {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 4px;
+  transition: color 0.15s ease;
+}
+
+.smart-auth-footer-link:hover {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.smart-auth-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.smart-otp-input {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  text-align: center;
+  color: #60a5fa;
+  background: rgba(16, 28, 52, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+}
+
+.smart-otp-input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25), 0 0 15px rgba(56, 189, 248, 0.2);
+}
+
+.smart-auth-info-banner {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.smart-auth-success-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.15);
+  border: 2px solid rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+  margin-bottom: 20px;
+  box-shadow: 0 0 25px rgba(34, 197, 94, 0.25);
+}
+
+
+
+/* ========================================================
    GOOGLE PAY & UPI INTEGRATION STYLES
    ======================================================== */
 .upi-app-strip {
