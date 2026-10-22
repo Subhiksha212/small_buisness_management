@@ -15,6 +15,7 @@ import {
   User,
   LogOut,
   X,
+  ChevronLeft,
   QrCode,
 } from 'lucide-react';
 
@@ -73,8 +74,13 @@ const Sidebar = ({ isOpen, onClose }) => {
               )}
             </div>
           </div>
-          <button className="sidebar-close-btn" onClick={onClose}>
-            <X size={20} />
+          <button
+            className="sidebar-close-btn"
+            onClick={onClose}
+            title="Close Sidebar"
+            aria-label="Close Sidebar"
+          >
+            <ChevronLeft size={18} />
           </button>
         </div>
 

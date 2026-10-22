@@ -26,7 +26,31 @@ import SetuCallback from './pages/SetuCallback';
 import SetuSandboxApproval from './pages/SetuSandboxApproval';
 
 function AppContent() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      if (window.innerWidth <= 900) return false;
+      return localStorage.getItem('smart_business_sidebar_state') !== 'closed';
+    }
+    return true;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined' && window.innerWidth > 900) {
+        localStorage.setItem('smart_business_sidebar_state', next ? 'open' : 'closed');
+      }
+      return next;
+    });
+  };
+
+  const closeSidebar = () => {
+    setSidebarOpen(false);
+    if (typeof window !== 'undefined' && window.innerWidth > 900) {
+      localStorage.setItem('smart_business_sidebar_state', 'closed');
+    }
+  };
+
   const [isListening, setIsListening] = useState(false);
   const [speakTrigger, setSpeakTrigger] = useState(null);
   const [startListenTrigger, setStartListenTrigger] = useState(null);
@@ -67,14 +91,15 @@ function AppContent() {
         path="/*"
         element={
           <ProtectedRoute>
-            <div className="app-layout">
-              {/* Persistent Left Sidebar */}
-              <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <div className={`app-layout ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+              {/* Collapsible Left Sidebar */}
+              <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
-              {/* Main Right Area */}
+              {/* Main Right Area - Automatically adjusts margin and width */}
               <div className="main-wrapper">
                 <Header
-                  onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                  onToggleSidebar={toggleSidebar}
+                  isSidebarOpen={sidebarOpen}
                   onSpeakPage={handleSpeakPage}
                   onStartVoiceCommand={handleStartVoiceCommand}
                   isListening={isListening}

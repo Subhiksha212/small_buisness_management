@@ -1,24 +1,23 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { getDashboardData } from '../services/api';
+import { getDashboardData, getDashboardInsights } from '../services/api';
 import useRealtimeEvents from '../hooks/useRealtimeEvents';
 import {
   TrendingUp,
   TrendingDown,
   Wallet,
-  PieChart,
+  Clock,
   PlusCircle,
   MinusCircle,
   ScanLine,
   ArrowRight,
   ArrowUpRight,
   ArrowDownRight,
-  CreditCard,
   Calendar,
-  CheckCircle2,
-  Radio,
   Smartphone,
+  Brain,
+  X,
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -36,6 +35,10 @@ const Dashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Today');
+  const [showInsight, setShowInsight] = useState(true);
+  const [insightsText, setInsightsText] = useState(
+    'Real-time data synchronization is active. All financial flows update automatically.'
+  );
 
   const fetchDashboard = useCallback(async (showLoading = false) => {
     try {
@@ -46,6 +49,19 @@ const Dashboard = () => {
       console.error('Error fetching dashboard:', err);
     } finally {
       if (showLoading) setLoading(false);
+    }
+  }, []);
+
+  const fetchInsights = useCallback(async () => {
+    try {
+      const res = await getDashboardInsights();
+      if (res && res.recommendations && res.recommendations.length > 0) {
+        setInsightsText(res.recommendations[0]);
+      } else if (res && res.summary) {
+        setInsightsText(res.summary);
+      }
+    } catch (err) {
+      // Keep default fallback
     }
   }, []);
 
@@ -62,6 +78,10 @@ const Dashboard = () => {
     fetchDashboard(true);
   }, [fetchDashboard]);
 
+  useEffect(() => {
+    fetchInsights();
+  }, [fetchInsights]);
+
   const isProfit = data.netProfit >= 0;
   const maxTotal = Math.max(data.totalSales, data.totalExpenses, 1);
   const salesWidth = Math.min(100, Math.round((data.totalSales / maxTotal) * 100));
@@ -73,71 +93,67 @@ const Dashboard = () => {
   const circumference = 2 * Math.PI * 40; // r=40
   const salesDash = salesRatio * circumference;
 
+  // Filter transactions based on active segment tab
+  const filteredTransactions = (data.recentTransactions || []).filter((tx) => {
+    if (activeTab === 'Today') {
+      const txDate = new Date(tx.createdAt || Date.now());
+      const today = new Date();
+      return (
+        txDate.getDate() === today.getDate() &&
+        txDate.getMonth() === today.getMonth() &&
+        txDate.getFullYear() === today.getFullYear()
+      );
+    }
+    if (activeTab === 'This Week') {
+      const txDate = new Date(tx.createdAt || Date.now());
+      const now = new Date();
+      const diffDays = (now - txDate) / (1000 * 60 * 60 * 24);
+      return diffDays <= 7;
+    }
+    if (activeTab === 'This Month') {
+      const txDate = new Date(tx.createdAt || Date.now());
+      const today = new Date();
+      return (
+        txDate.getMonth() === today.getMonth() &&
+        txDate.getFullYear() === today.getFullYear()
+      );
+    }
+    return true;
+  });
+
+  const displayTransactions = filteredTransactions.length > 0 ? filteredTransactions : data.recentTransactions;
+
   return (
     <div className="dashboard-container-sleek">
-      {/* Live SSE Status Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: 'var(--text-primary, #0f172a)' }}>
-          {t('dashboard') || 'Dashboard'}
+      {/* Live SSE Status Bar & Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: '#ffffff', letterSpacing: '-0.3px' }}>
+          {t('dashboard') || 'dashboard'}
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
+            className="pl-simulator-btn"
             onClick={() => navigate('/upi-app')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#0f172a',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '999px',
-              padding: '4px 12px',
-              fontSize: '11px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.15)',
-              transition: 'transform 0.1s ease',
-            }}
+            title="Open Interactive Simulated UPI Mobile App"
           >
-            <Smartphone size={12} style={{ color: '#38bdf8' }} />
+            <Smartphone size={13} style={{ color: '#38bdf8' }} />
             <span>Open UPI App Simulator</span>
           </button>
 
-          <span
-            style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '3px 10px',
-              borderRadius: '999px',
-              backgroundColor: isConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)',
-              color: isConnected ? '#059669' : '#64748b',
-              border: `1px solid ${isConnected ? 'rgba(16, 185, 129, 0.25)' : 'rgba(100, 116, 139, 0.25)'}`,
-            }}
-          >
-            <span
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: isConnected ? '#10b981' : '#94a3b8',
-                boxShadow: isConnected ? '0 0 6px #10b981' : 'none',
-              }}
-            />
-            {isConnected ? 'Real-Time Sync Active' : 'Connecting to Live Events...'}
+          <span className="pl-sync-badge">
+            <span className="pl-sync-dot" />
+            <span>{isConnected ? 'Real-Time Sync Active' : 'Connecting to Live Events...'}</span>
           </span>
         </div>
       </div>
 
-      {/* 1. TOP STATS ROW - 4 Compact KPI Cards */}
+      {/* 1. TOP STATS ROW - 4 Compact KPI Cards with Glowing Borders */}
       <div className="kpi-grid">
         {/* Total Sales */}
-        <div className="kpi-card" onClick={() => navigate('/transactions')}>
+        <div className="kpi-card kpi-card-sales" onClick={() => navigate('/transactions')}>
           <div className="kpi-top">
-            <span className="kpi-label">{t('totalSales')}</span>
+            <span className="kpi-label">{t('totalSales') || 'TOTAL SALES'}</span>
             <div className="kpi-icon-badge bg-profit-soft">
               <TrendingUp size={16} className="text-profit" />
             </div>
@@ -146,15 +162,15 @@ const Dashboard = () => {
             ₹{data.totalSales.toLocaleString('en-IN')}
           </div>
           <div className="kpi-footer">
-            <span className="kpi-subtext">Cash & Digital income</span>
+            <span className="kpi-subtext">Cash &amp; Digital income</span>
             <ArrowUpRight size={14} className="text-profit" />
           </div>
         </div>
 
         {/* Total Expenses */}
-        <div className="kpi-card" onClick={() => navigate('/expenses')}>
+        <div className="kpi-card kpi-card-spent" onClick={() => navigate('/expenses')}>
           <div className="kpi-top">
-            <span className="kpi-label">{t('totalSpent')}</span>
+            <span className="kpi-label">{t('totalSpent') || 'TOTAL SPENT'}</span>
             <div className="kpi-icon-badge bg-loss-soft">
               <TrendingDown size={16} className="text-loss" />
             </div>
@@ -169,11 +185,11 @@ const Dashboard = () => {
         </div>
 
         {/* Net Profit / Margin */}
-        <div className="kpi-card" onClick={() => navigate('/profit-loss')}>
+        <div className="kpi-card kpi-card-profit" onClick={() => navigate('/profit-loss')}>
           <div className="kpi-top">
-            <span className="kpi-label">{t('profitLoss')}</span>
-            <div className={`kpi-icon-badge ${isProfit ? 'bg-profit-soft' : 'bg-loss-soft'}`}>
-              <PieChart size={16} className={isProfit ? 'text-profit' : 'text-loss'} />
+            <span className="kpi-label">{t('profitLoss') || 'PROFIT / LOSS'}</span>
+            <div className="kpi-icon-badge bg-profit-soft">
+              <Clock size={16} className={isProfit ? 'text-profit' : 'text-loss'} />
             </div>
           </div>
           <div className={`kpi-amount ${isProfit ? 'text-profit' : 'text-loss'}`}>
@@ -181,15 +197,15 @@ const Dashboard = () => {
           </div>
           <div className="kpi-footer">
             <span className={`kpi-chip ${isProfit ? 'chip-profit' : 'chip-loss'}`}>
-              {isProfit ? `● ${t('profit')}` : `● ${t('loss')}`}
+              {isProfit ? `● ${t('profit') || 'PROFIT'}` : `● ${t('loss') || 'LOSS'}`}
             </span>
           </div>
         </div>
 
         {/* Current Balance */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-card-balance" onClick={() => navigate('/transactions')}>
           <div className="kpi-top">
-            <span className="kpi-label">{t('currentBalance')}</span>
+            <span className="kpi-label">{t('currentBalance') || 'CURRENT BALANCE'}</span>
             <div className="kpi-icon-badge bg-cyan-soft">
               <Wallet size={16} className="text-cyan" />
             </div>
@@ -203,23 +219,29 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* 2. COMPACT QUICK ACTION BAR */}
+      {/* 2. COMPACT QUICK ACTION BAR (Dark Glassmorphic Pills) */}
       <div className="quick-actions-strip">
         <button className="sleek-action-pill btn-action-sale" onClick={() => navigate('/add-sale')}>
-          <PlusCircle size={16} />
-          <span>Record Sale</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PlusCircle size={16} style={{ color: '#2dd4bf' }} />
+            <span>Record Sale</span>
+          </div>
           <span className="pill-shortcut">Cash / UPI</span>
         </button>
 
         <button className="sleek-action-pill btn-action-expense" onClick={() => navigate('/expenses')}>
-          <MinusCircle size={16} />
-          <span>Record Expense</span>
-          <span className="pill-shortcut">Bills & Stock</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MinusCircle size={16} style={{ color: '#f87171' }} />
+            <span>Record Expense</span>
+          </div>
+          <span className="pill-shortcut">Bills &amp; Stock</span>
         </button>
 
         <button className="sleek-action-pill btn-action-scan" onClick={() => navigate('/scan')}>
-          <ScanLine size={16} />
-          <span>Scan Product QR</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ScanLine size={16} style={{ color: '#38bdf8' }} />
+            <span>Scan Product QR</span>
+          </div>
           <span className="pill-shortcut">Auto Add to Ledger</span>
         </button>
       </div>
@@ -242,7 +264,7 @@ const Dashboard = () => {
           <div className="flow-bars-container">
             <div className="flow-item">
               <div className="flow-meta">
-                <span className="flow-label">{t('salesOverview')}</span>
+                <span className="flow-label">{t('salesOverview') || 'Sales Overview'}</span>
                 <span className="flow-val text-profit">₹{data.totalSales.toLocaleString('en-IN')}</span>
               </div>
               <div className="flow-track">
@@ -252,7 +274,7 @@ const Dashboard = () => {
 
             <div className="flow-item">
               <div className="flow-meta">
-                <span className="flow-label">{t('expenseOverview')}</span>
+                <span className="flow-label">{t('expenseOverview') || 'Expense Overview'}</span>
                 <span className="flow-val text-loss">₹{data.totalExpenses.toLocaleString('en-IN')}</span>
               </div>
               <div className="flow-track">
@@ -286,14 +308,16 @@ const Dashboard = () => {
 
           <div className="svg-donut-wrapper">
             <svg viewBox="0 0 100 100" className="donut-svg">
+              {/* Background dark ring track */}
               <circle
                 cx="50"
                 cy="50"
                 r="40"
                 fill="none"
-                stroke="#f1f5f9"
+                stroke="rgba(255, 255, 255, 0.08)"
                 strokeWidth="7"
               />
+              {/* Green Inflow / Sales arc */}
               <circle
                 cx="50"
                 cy="50"
@@ -305,7 +329,9 @@ const Dashboard = () => {
                 strokeDashoffset="0"
                 strokeLinecap="round"
                 transform="rotate(-90 50 50)"
+                style={{ transition: 'stroke-dasharray 0.5s ease' }}
               />
+              {/* Red Outflow / Expense arc */}
               <circle
                 cx="50"
                 cy="50"
@@ -317,6 +343,7 @@ const Dashboard = () => {
                 strokeDashoffset={`${-salesDash}`}
                 strokeLinecap="round"
                 transform="rotate(-90 50 50)"
+                style={{ transition: 'stroke-dasharray 0.5s ease' }}
               />
             </svg>
             <div className="donut-inner-content">
@@ -338,12 +365,12 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* 4. RECENT TRANSACTIONS TABLE */}
+      {/* 4. RECENT TRANSACTIONS TABLE (Full Width) */}
       <div className="sleek-panel tx-panel-compact">
         <div className="panel-header-compact">
           <div className="tx-header-left">
-            <h3 className="panel-heading">{t('recentTransactions')}</h3>
-            <span className="badge-count">{data.recentTransactions.length} items</span>
+            <h3 className="panel-heading">{t('recentTransactions') || 'Recent Transactions'}</h3>
+            <span className="badge-count">{(data.recentTransactions || []).length} items</span>
           </div>
 
           <div className="tx-header-right">
@@ -360,18 +387,18 @@ const Dashboard = () => {
             </div>
 
             <button className="link-see-all" onClick={() => navigate('/transactions')}>
-              <span>{t('viewAll')}</span>
+              <span>{t('viewAll') || 'View All'}</span>
               <ArrowRight size={13} />
             </button>
           </div>
         </div>
 
-        {data.recentTransactions.length === 0 ? (
+        {displayTransactions.length === 0 ? (
           <div className="empty-state-compact">
             <div className="empty-icon-circle">
-              <Calendar size={22} className="text-muted" />
+              <Calendar size={20} className="text-muted" />
             </div>
-            <p className="empty-title">{t('noTransactions')}</p>
+            <p className="empty-title">{t('noTransactions') || 'No transactions found'}</p>
             <p className="empty-subtitle">Record your first sale or expense to see real-time updates.</p>
           </div>
         ) : (
@@ -379,15 +406,15 @@ const Dashboard = () => {
             <table className="compact-table">
               <thead>
                 <tr>
-                  <th>Date & Time</th>
-                  <th>Transaction Detail</th>
-                  <th>Method</th>
-                  <th>Source</th>
-                  <th style={{ textAlign: 'right' }}>Amount</th>
+                  <th>DATE &amp; TIME</th>
+                  <th>TRANSACTION DETAIL</th>
+                  <th>METHOD</th>
+                  <th>SOURCE</th>
+                  <th style={{ textAlign: 'right' }}>AMOUNT</th>
                 </tr>
               </thead>
               <tbody>
-                {data.recentTransactions.slice(0, 5).map((tx) => (
+                {displayTransactions.slice(0, 5).map((tx) => (
                   <tr key={tx.id || tx.rawId || Math.random()}>
                     <td className="cell-date-dim">{tx.date || 'Today'}</td>
                     <td>
@@ -395,11 +422,13 @@ const Dashboard = () => {
                         <span className={`icon-indicator ${tx.type === 'Sale' ? 'ind-sale' : 'ind-expense'}`}>
                           {tx.type === 'Sale' ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
                         </span>
-                        <strong className="tx-desc-title">{tx.detail || (tx.type === 'Sale' ? 'Cash Sale' : 'Store Expense')}</strong>
+                        <strong className="tx-desc-title">
+                          {tx.detail || (tx.type === 'Sale' ? 'Voice Cash Sale' : 'Store Expense')}
+                        </strong>
                       </div>
                     </td>
                     <td>
-                      <span className={`cell-payment-tag ${tx.paymentMethod === 'UPI' ? 'pm-upi-tag' : ''}`}>
+                      <span className="cell-payment-tag">
                         {tx.paymentMethod === 'UPI' && tx.upiApp ? tx.upiApp : (tx.paymentMethod || 'Cash')}
                       </span>
                     </td>
@@ -410,7 +439,7 @@ const Dashboard = () => {
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <span className={`tx-amount-compact ${tx.type === 'Sale' ? 'text-profit' : 'text-loss'}`}>
-                        {tx.type === 'Sale' ? '+' : '-'} ₹{tx.amount?.toLocaleString('en-IN')}
+                        {tx.type === 'Sale' ? '+' : '-'} ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
                       </span>
                     </td>
                   </tr>
@@ -420,6 +449,32 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Floating Real-Time AI Insights Pill */}
+      {showInsight && (
+        <div className="pl-insights-floating">
+          <div className="pl-insights-brain">
+            <Brain size={18} />
+          </div>
+          <div className="pl-insights-text">
+            <strong>Insights:</strong> {insightsText}
+          </div>
+          <button
+            onClick={() => setShowInsight(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#64748b',
+              cursor: 'pointer',
+              padding: '2px',
+              marginLeft: '4px',
+            }}
+            title="Dismiss insight"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

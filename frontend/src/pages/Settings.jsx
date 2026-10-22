@@ -311,7 +311,7 @@ const Settings = () => {
           <div className="store-qr-preview-box mt-16">
             <div className="flex-align-gap mb-8">
               <QrCode size={16} className="text-cyan" />
-              <strong style={{ fontSize: '13px' }}>Store Google Pay / UPI QR Code</strong>
+              <strong style={{ fontSize: '13px', color: '#ffffff' }}>Store Google Pay / UPI QR Code</strong>
             </div>
             <p className="micro-notice">
               Customers scan this QR code with <strong>Google Pay (GPay)</strong>, PhonePe, or Paytm to pay directly to your VPA: <code>{displayVpa}</code>
@@ -363,47 +363,47 @@ const Settings = () => {
               </span>
             </div>
 
-            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6', marginBottom: '12px' }}>
-              <div><strong>Gateway Provider:</strong> {paymentStatus.providerName || 'Razorpay / Cashfree'}</div>
+            <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: '1.6', marginBottom: '12px' }}>
+              <div><strong style={{ color: '#ffffff' }}>Gateway Provider:</strong> {paymentStatus.providerName || 'Razorpay / Cashfree'}</div>
               <div>
-                <strong>Environment:</strong>{' '}
-                <span style={{ fontWeight: '700', color: paymentStatus.environment === 'production' ? '#16a34a' : '#d97706' }}>
+                <strong style={{ color: '#ffffff' }}>Environment:</strong>{' '}
+                <span style={{ fontWeight: '700', color: paymentStatus.environment === 'production' ? '#34d399' : '#fbbf24' }}>
                   {paymentStatus.environment === 'production' ? 'Production (Live)' : 'Sandbox / Test Mode'}
                 </span>
               </div>
               <div>
-                <strong>Auto Ingestion Status:</strong>{' '}
-                <span style={{ fontWeight: '600', color: paymentStatus.autoIngestionAvailable ? '#059669' : '#dc2626' }}>
+                <strong style={{ color: '#ffffff' }}>Auto Ingestion Status:</strong>{' '}
+                <span style={{ fontWeight: '600', color: paymentStatus.autoIngestionAvailable ? '#34d399' : '#f87171' }}>
                   {paymentStatus.autoIngestionAvailable ? 'Active via HMAC Webhook & REST Sync' : 'Not Configured'}
                 </span>
               </div>
               <div>
-                <strong>Last Successful Sync:</strong>{' '}
+                <strong style={{ color: '#ffffff' }}>Last Successful Sync:</strong>{' '}
                 {paymentStatus.lastSuccessfulSyncTime
                   ? new Date(paymentStatus.lastSuccessfulSyncTime).toLocaleString('en-IN')
                   : 'No sync recorded yet'}
               </div>
               {paymentStatus.lastSyncError && (
-                <div style={{ color: '#dc2626' }}>
-                  <strong>Last Sync Error:</strong> {paymentStatus.lastSyncError}
+                <div style={{ color: '#f87171' }}>
+                  <strong style={{ color: '#ffffff' }}>Last Sync Error:</strong> {paymentStatus.lastSyncError}
                 </div>
               )}
-              <div><strong>Webhook Endpoint:</strong> <code style={{ fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>/api/payments/webhook</code></div>
+              <div><strong style={{ color: '#ffffff' }}>Webhook Endpoint:</strong> <code style={{ fontSize: '11px', background: 'rgba(255, 255, 255, 0.08)', color: '#38bdf8', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>/api/payments/webhook</code></div>
             </div>
 
             {/* Bank Feed Status */}
-            <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
-              <strong style={{ fontSize: '12px', color: '#0369a1' }}>Authorized Bank Feed Integration</strong>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0' }}>
+            <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(2, 132, 199, 0.3)', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
+              <strong style={{ fontSize: '12px', color: '#38bdf8' }}>Authorized Bank Feed Integration</strong>
+              <p style={{ fontSize: '11px', color: '#cbd5e1', margin: '4px 0 0 0', lineHeight: '1.4' }}>
                 Bank API feeds require formal corporate approval (e.g. ICICI Eazypay, HDFC Corporate Open Banking, Decentro). Direct personal bank account scraping is disabled for compliance and security.
               </p>
             </div>
 
-            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: '600', fontSize: '12px' }}>
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171', fontWeight: '700', fontSize: '12px' }}>
                 <Lock size={13} /> Strict Security Standard
               </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0' }}>
+              <p style={{ fontSize: '11px', color: '#cbd5e1', margin: '4px 0 0 0', lineHeight: '1.4' }}>
                 Never enter or share UPI PIN, OTP, Card PIN, or CVV. Full card numbers are never stored. Transactions are verified exclusively via HMAC cryptographic webhook signatures on the backend.
               </p>
             </div>
@@ -416,7 +416,7 @@ const Settings = () => {
                 <Building2 size={16} className="text-cyan" />
                 <div>
                   <h3 className="panel-heading">Setu Account Aggregator (AA)</h3>
-                  <span className="panel-subheading" style={{ fontSize: '11px', color: '#64748b' }}>
+                  <span className="panel-subheading" style={{ fontSize: '11px', color: '#93c5fd' }}>
                     RBI-regulated bank account linking & consent architecture
                   </span>
                 </div>
@@ -430,29 +430,29 @@ const Settings = () => {
               </span>
             </div>
 
-            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6', marginBottom: '14px' }}>
+            <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: '1.6', marginBottom: '14px' }}>
               <div>
-                <strong>Aggregator Gateway:</strong> Setu FIU Sandbox (<code>{setuConfig?.baseUrl || 'https://fiu-sandbox.setu.co'}</code>)
+                <strong style={{ color: '#ffffff' }}>Aggregator Gateway:</strong> Setu FIU Sandbox (<code style={{ color: '#38bdf8', background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>{setuConfig?.baseUrl || 'https://fiu-sandbox.setu.co'}</code>)
               </div>
               <div>
-                <strong>Product Instance:</strong>{' '}
-                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#0369a1' }}>
+                <strong style={{ color: '#ffffff' }}>Product Instance:</strong>{' '}
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#38bdf8', background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>
                   {setuConfig?.productInstanceId ? `${setuConfig.productInstanceId.substring(0, 8)}...` : 'Configured in backend .env'}
                 </span>
               </div>
               <div>
-                <strong>Redirect Target:</strong>{' '}
-                <code style={{ fontSize: '11px', background: '#f1f5f9', padding: '2px 4px', borderRadius: '4px' }}>
+                <strong style={{ color: '#ffffff' }}>Redirect Target:</strong>{' '}
+                <code style={{ fontSize: '11px', background: 'rgba(255, 255, 255, 0.08)', color: '#38bdf8', padding: '2px 5px', borderRadius: '4px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
                   /setu-callback
                 </code>
               </div>
             </div>
 
-            <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.2)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#0284c7', fontWeight: '600', fontSize: '12px' }}>
+            <div style={{ backgroundColor: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(2, 132, 199, 0.3)', padding: '10px', borderRadius: '8px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#38bdf8', fontWeight: '700', fontSize: '12px' }}>
                 <ShieldCheck size={14} /> REBIT Financial Information Purpose 101
               </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+              <p style={{ fontSize: '11px', color: '#cbd5e1', margin: '4px 0 0 0', lineHeight: '1.4' }}>
                 Fetches read-only deposit transaction data with customer cryptographic consent. Passwords, MPINs, and OTPs are never stored or requested by our application.
               </p>
             </div>
@@ -493,7 +493,7 @@ const Settings = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', marginBottom: '4px' }}>
                   <CheckCircle size={14} /> Consent Flow Initialized!
                 </div>
-                <div style={{ fontSize: '11px', color: '#166534' }}>
+                <div style={{ fontSize: '11px', color: '#34d399' }}>
                   Consent ID: <code>{setuResult.consentId}</code>
                 </div>
                 <div style={{ marginTop: '8px' }}>
@@ -521,8 +521,8 @@ const Settings = () => {
                   className="sleek-text-input"
                   style={{ fontFamily: 'monospace' }}
                 />
-                <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                  Use <code>9999999999</code> for Setu Sandbox simulated FIP accounts (OTP: <code>123456</code>).
+                <span style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>
+                  Use <code style={{ color: '#38bdf8', background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>9999999999</code> for Setu Sandbox simulated FIP accounts (OTP: <code style={{ color: '#38bdf8', background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>123456</code>).
                 </span>
               </div>
 
@@ -553,10 +553,10 @@ const Settings = () => {
                     fontSize: '11px',
                     textDecoration: 'none',
                     padding: '8px 12px',
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
                     borderRadius: '8px',
-                    color: '#475569',
-                    backgroundColor: '#f8fafc',
+                    color: '#f1f5f9',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
                   }}
                   title="View callback inspection page"
                 >
@@ -566,12 +566,12 @@ const Settings = () => {
             </form>
 
             {/* Stage 3: Bank Data Fetch Action */}
-            <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '14px' }}>
+            <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <strong style={{ fontSize: '12px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <strong style={{ fontSize: '12px', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Landmark size={14} className="text-cyan" /> Stage 3: Bank Statement Data Fetch
                 </strong>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>REBIT FI Sessions</span>
+                <span style={{ fontSize: '10px', color: '#93c5fd' }}>REBIT FI Sessions</span>
               </div>
 
               {fetchError && (
@@ -587,13 +587,13 @@ const Settings = () => {
                     <CheckCircle size={13} />
                     <span>Statement Sync Complete! (Status: {fetchResult.status})</span>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#166534', marginTop: '3px', lineHeight: '1.4' }}>
+                  <div style={{ fontSize: '11px', color: '#6ee7b7', marginTop: '3px', lineHeight: '1.4' }}>
                     • Imported: <strong>{fetchResult.importedCount}</strong> new transaction(s)<br />
                     • Duplicates skipped: <strong>{fetchResult.skippedDuplicates}</strong><br />
                     • Matched with shop records: <strong>{fetchResult.alreadyExistingCount || 0}</strong>
                   </div>
                   <div style={{ marginTop: '6px' }}>
-                    <Link to="/transactions" style={{ fontSize: '11px', fontWeight: '700', color: '#047857', textDecoration: 'underline' }}>
+                    <Link to="/transactions" style={{ fontSize: '11px', fontWeight: '700', color: '#34d399', textDecoration: 'underline' }}>
                       View in Transactions / Ledger →
                     </Link>
                   </div>
@@ -640,8 +640,8 @@ const Settings = () => {
                   </>
                 )}
               </button>
-              <span style={{ fontSize: '10px', color: '#64748b', display: 'block', marginTop: '4px', lineHeight: '1.3' }}>
-                Calls Setu <code>POST /sessions</code> & <code>GET /sessions/:id</code> to import transactions with duplicate protection into History and Dashboard.
+              <span style={{ fontSize: '11px', color: '#cbd5e1', display: 'block', marginTop: '6px', lineHeight: '1.4' }}>
+                Calls Setu <code style={{ color: '#38bdf8', background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>POST /sessions</code> &amp; <code style={{ color: '#38bdf8', background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>GET /sessions/:id</code> to import transactions with duplicate protection into History and Dashboard.
               </span>
             </div>
           </div>
@@ -691,11 +691,11 @@ const Settings = () => {
               </button>
             </form>
 
-            <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '10px', marginTop: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: '700', fontSize: '12px' }}>
+            <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '8px', padding: '10px', marginTop: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24', fontWeight: '700', fontSize: '12px' }}>
                 Personal UPI Notice & Limitations
               </div>
-              <p style={{ fontSize: '11px', color: '#78350f', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+              <p style={{ fontSize: '11px', color: '#fef3c7', margin: '4px 0 0 0', lineHeight: '1.4' }}>
                 Personal VPAs (Google Pay / PhonePe personal handles) do not provide automated transaction history feeds. Automatic ingestion is disabled for personal accounts. Payments must be verified manually or reconciled with the customer's 12-digit UTR reference number.
               </p>
             </div>
@@ -712,11 +712,11 @@ const Settings = () => {
                 style={{
                   fontSize: '10px',
                   fontWeight: '800',
-                  padding: '2px 6px',
+                  padding: '3px 8px',
                   borderRadius: '4px',
-                  backgroundColor: '#fef3c7',
-                  color: '#b45309',
-                  border: '1px solid #fde68a',
+                  backgroundColor: 'rgba(245, 158, 11, 0.18)',
+                  color: '#fbbf24',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
                   letterSpacing: '0.04em',
                 }}
               >
@@ -735,20 +735,40 @@ const Settings = () => {
               </div>
             )}
 
-            <div className="simulator-actions-strip">
+            <div className="simulator-actions-strip" style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="sim-chip-btn sim-emerald"
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  color: '#ffffff',
+                  border: '1px solid #34d399',
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  fontWeight: '700',
+                  fontSize: '12px',
+                  boxShadow: '0 2px 10px rgba(5, 150, 105, 0.35)',
+                }}
                 onClick={() => handleRunSimulatedPayment('received', 500, 'UPI')}
               >
-                <ArrowDownLeft size={13} /> Test Inflow: +₹500 (Sale)
+                <ArrowDownLeft size={14} /> Test Inflow: +₹500 (Sale)
               </button>
               <button
                 type="button"
                 className="sim-chip-btn sim-rose"
+                style={{
+                  background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+                  color: '#ffffff',
+                  border: '1px solid #f87171',
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  fontWeight: '700',
+                  fontSize: '12px',
+                  boxShadow: '0 2px 10px rgba(225, 29, 72, 0.35)',
+                }}
                 onClick={() => handleRunSimulatedPayment('sent', 350, 'UPI', 'Stock')}
               >
-                <ArrowUpRight size={13} /> Test Outflow: -₹350 (Expense)
+                <ArrowUpRight size={14} /> Test Outflow: -₹350 (Expense)
               </button>
             </div>
           </div>

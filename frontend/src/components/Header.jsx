@@ -5,7 +5,7 @@ import { Volume2, Mic, Menu, LogOut, Store, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { syncGatewayPayments } from '../services/api';
 
-const Header = ({ onToggleSidebar, onSpeakPage, onStartVoiceCommand, isListening }) => {
+const Header = ({ onToggleSidebar, isSidebarOpen, onSpeakPage, onStartVoiceCommand, isListening }) => {
   const { language, setLanguage, t } = useLanguage();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -33,7 +33,12 @@ const Header = ({ onToggleSidebar, onSpeakPage, onStartVoiceCommand, isListening
   return (
     <header className="app-header-sleek">
       <div className="header-left-sleek">
-        <button className="mobile-menu-btn" onClick={onToggleSidebar}>
+        <button
+          className="sidebar-toggle-btn"
+          onClick={onToggleSidebar}
+          title={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          aria-label="Toggle sidebar"
+        >
           <Menu size={20} />
         </button>
         <div className="header-brand-wrap">

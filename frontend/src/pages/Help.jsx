@@ -23,7 +23,7 @@ const Help = () => {
       {/* Page Title & Breadcrumb */}
       <div className="page-intro-bar">
         <div>
-          <h2 className="section-title">{t('help') || 'Help & Voice Guide'}</h2>
+          <h2 className="section-title">{t('navVoiceHelp') || 'Help & Voice Guide'}</h2>
           <p className="section-subtitle">Hands-free voice accounting and step-by-step cashier cheat-sheets</p>
         </div>
       </div>

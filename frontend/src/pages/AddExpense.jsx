@@ -18,7 +18,6 @@ import {
   Smartphone,
   CreditCard,
   TrendingDown,
-  Info,
   UserCheck,
 } from 'lucide-react';
 
@@ -166,8 +165,8 @@ const AddExpense = () => {
         </div>
       </div>
 
-      <div className="split-grid-layout">
-        {/* LEFT COLUMN: COMPACT EXPENSE FORM */}
+      <div style={{ maxWidth: '820px', margin: '0 auto', width: '100%' }}>
+        {/* COMPACT EXPENSE FORM */}
         <div className="sleek-panel main-form-panel">
           <div className="panel-header-compact">
             <div className="flex-align-gap">
@@ -373,44 +372,6 @@ const AddExpense = () => {
               </span>
             </button>
           </form>
-        </div>
-
-        {/* RIGHT COLUMN: HELPFUL TIPS & QUICK SUMMARY */}
-        <div className="side-column-panels">
-          <div className="sleek-panel expense-guidance-panel">
-            <div className="panel-header-compact">
-              <div className="flex-align-gap">
-                <Info size={16} className="text-cyan" />
-                <h3 className="panel-heading">Payment Tracking Guidance</h3>
-              </div>
-            </div>
-
-            <div className="tips-list-compact">
-              <div className="tip-item">
-                <div className="tip-bullet">01</div>
-                <div>
-                  <strong>Pay Anyone Supported</strong>
-                  <p>Enter any person or company name in the <em>Paid To</em> field (suppliers, staff, landlords, or local vendors) for clear accounting history.</p>
-                </div>
-              </div>
-
-              <div className="tip-item">
-                <div className="tip-bullet">02</div>
-                <div>
-                  <strong>All UPI Apps Tracked</strong>
-                  <p>Select whichever UPI app you used — Google Pay, PhonePe, Paytm, or BHIM. All UPI transactions record seamlessly into your balance.</p>
-                </div>
-              </div>
-
-              <div className="tip-item">
-                <div className="tip-bullet">03</div>
-                <div>
-                  <strong>Smart OCR Scan</strong>
-                  <p>Have physical cash memos or receipts? Use <em>Scan Receipt</em> to extract vendor, items, and totals automatically.</p>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

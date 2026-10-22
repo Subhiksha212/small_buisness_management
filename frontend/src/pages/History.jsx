@@ -325,12 +325,12 @@ const Transactions = () => {
             <table className="compact-table">
               <thead>
                 <tr>
-                  <th>{t('date')}</th>
-                  <th>{t('type')}</th>
-                  <th>{t('descriptionCategory')}</th>
-                  <th>{t('paymentMethodLabel')}</th>
-                  <th>{t('source')}</th>
-                  <th style={{ textAlign: 'right' }}>{t('amount')}</th>
+                  <th>Date &amp; Time</th>
+                  <th>Type</th>
+                  <th>Description / Category</th>
+                  <th>Payment Method</th>
+                  <th>Source</th>
+                  <th style={{ textAlign: 'right' }}>Amount</th>
                   <th style={{ textAlign: 'center' }}>Action</th>
                 </tr>
               </thead>
@@ -344,9 +344,9 @@ const Transactions = () => {
                         <span
                           className="micro-type-chip"
                           style={{
-                            backgroundColor: tx.type === 'Bank Credit' ? 'rgba(2, 132, 199, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                            color: tx.type === 'Bank Credit' ? '#0284c7' : '#b45309',
-                            border: `1px solid ${tx.type === 'Bank Credit' ? 'rgba(2, 132, 199, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                            backgroundColor: tx.type === 'Bank Credit' ? 'rgba(2, 132, 199, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                            color: tx.type === 'Bank Credit' ? '#38bdf8' : '#fbbf24',
+                            border: `1px solid ${tx.type === 'Bank Credit' ? 'rgba(56, 189, 248, 0.4)' : 'rgba(251, 191, 36, 0.4)'}`,
                           }}
                         >
                           <Building2 size={11} />
@@ -355,7 +355,7 @@ const Transactions = () => {
                       ) : (
                         <span className={`micro-type-chip ${tx.type === 'Sale' ? 'type-sale' : 'type-expense'}`}>
                           {tx.type === 'Sale' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                          <span>{tx.type === 'Sale' ? t('sales') : t('expenses')}</span>
+                          <span>{tx.type === 'Sale' ? (t('sales') || 'Sale') : (t('expenses') || 'Expense')}</span>
                         </span>
                       )}
                     </td>
@@ -363,23 +363,24 @@ const Transactions = () => {
                     <td>
                       <strong className="tx-desc-title">{tx.detail}</strong>
                       {tx.accountMasked ? (
-                        <span className="tx-payee-sub" style={{ color: '#0284c7' }}>🏦 Bank Acc: {tx.accountMasked}</span>
+                        <span className="tx-payee-sub" style={{ color: '#38bdf8', display: 'block', fontSize: '11px', marginTop: '2px' }}>
+                          🏦 Bank Acc: {tx.accountMasked}
+                        </span>
                       ) : tx.paidTo ? (
-                        <span className="tx-payee-sub">👤 To: {tx.paidTo}</span>
+                        <span className="tx-payee-sub" style={{ color: '#38bdf8', display: 'block', fontSize: '11px', marginTop: '2px' }}>
+                          👤 To: {tx.paidTo}
+                        </span>
                       ) : null}
                       {tx.alreadyExistsInApp && (
-                        <span style={{ fontSize: '10px', color: '#059669', display: 'block', fontWeight: '600' }}>
+                        <span style={{ fontSize: '11px', color: '#34d399', display: 'block', fontWeight: '600', marginTop: '2px' }}>
                           ✓ Reconciled with existing shop record
                         </span>
                       )}
                     </td>
 
                     <td>
-                      <span className={`cell-payment-tag ${tx.paymentMethod === 'UPI' ? 'pm-upi-tag' : ''}`}>
-                        {tx.paymentMethod === 'UPI' && tx.upiApp ? tx.upiApp : tx.paymentMethod}
-                        {tx.utrNumber ? (
-                          <span className="cell-utr-sub">UTR •••{tx.utrNumber.slice(-4)}</span>
-                        ) : null}
+                      <span className={`cell-payment-tag ${tx.paymentMethod === 'UPI' || tx.upiApp ? 'pm-upi-tag' : ''}`}>
+                        {tx.upiApp ? tx.upiApp : (tx.paymentMethod || 'Cash')}
                       </span>
                     </td>
 
@@ -388,12 +389,12 @@ const Transactions = () => {
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                           <span
                             className="micro-source-pill"
-                            style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}
+                            style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.35)' }}
                           >
                             🏦 Setu AA
                           </span>
                           {tx.isTest && (
-                            <span style={{ fontSize: '9px', fontWeight: '800', padding: '1px 4px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                            <span style={{ fontSize: '9px', fontWeight: '800', padding: '1px 4px', borderRadius: '4px', backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
                               SANDBOX
                             </span>
                           )}
@@ -409,17 +410,17 @@ const Transactions = () => {
                           }`}
                         >
                           {tx.entryMethod === 'automatic'
-                            ? t('automatic')
+                            ? (t('automatic') || 'AUTOMATIC')
                             : tx.entryMethod === 'scanned'
-                            ? t('scanned')
-                            : t('manual')}
+                            ? (t('scanned') || 'SCANNED')
+                            : (t('manual') || 'MANUAL')}
                         </span>
                       )}
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
-                      <span className={`tx-amount-compact ${tx.type === 'Sale' || tx.type === 'Bank Credit' ? 'text-profit' : 'text-loss'}`}>
-                        {tx.type === 'Sale' || tx.type === 'Bank Credit' ? '+' : '-'} ₹{tx.amount.toLocaleString('en-IN')}
+                      <span className={`tx-amount-compact ${tx.type === 'Sale' || tx.type === 'Bank Credit' ? 'text-profit' : 'text-loss'}`} style={{ fontSize: '14px', fontWeight: '800' }}>
+                        {tx.type === 'Sale' || tx.type === 'Bank Credit' ? '+' : '-'} ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
                       </span>
                     </td>
 
@@ -427,7 +428,7 @@ const Transactions = () => {
                       <button
                         className="btn-trash-compact"
                         onClick={() => handleDelete(tx)}
-                        title={t('delete')}
+                        title={t('delete') || 'Delete'}
                       >
                         <Trash2 size={14} />
                       </button>

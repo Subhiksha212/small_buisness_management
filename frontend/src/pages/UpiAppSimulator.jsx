@@ -1047,37 +1047,6 @@ const UpiAppSimulator = () => {
         {/* RIGHT SIDE: LIVE STORE VERIFICATION & EXPLANATION */}
         {/* ============================================================ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Live Store Sync Explanation Box */}
-          <div className="sleek-panel" style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Sparkles size={18} className="text-cyan" />
-              <h3 style={{ fontSize: '16px', fontWeight: '700', margin: 0 }}>
-                Real-Time Architecture in Action
-              </h3>
-            </div>
-            <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6', margin: '0 0 16px 0' }}>
-              Every time you tap <strong>Pay</strong> or <strong>Receive</strong> on the phone simulator:
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', color: '#334155' }}>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: '#2563eb', color: '#ffffff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>1</span>
-                <div><strong>Dummy UPI ID accepted:</strong> Use any format like <code>vendor@okaxis</code> or <code>customer@paytm</code>.</div>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: '#2563eb', color: '#ffffff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>2</span>
-                <div><strong>Recorded in MongoDB:</strong> Inflow creates a <code>Sale</code>; Outflow creates an <code>Expense</code> with <code>PaymentTransaction</code> idempotency.</div>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: '#2563eb', color: '#ffffff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>3</span>
-                <div><strong>SSE Broadcast:</strong> An authenticated Server-Sent Event is pushed instantly to your browser tabs.</div>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: '#10b981', color: '#ffffff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>4</span>
-                <div><strong>Zero-Refresh Reflection:</strong> Open your Dashboard or Transactions page; totals update automatically before your eyes!</div>
-              </div>
-            </div>
-          </div>
 
           {/* Quick Shortcuts to verify reflection */}
           <div className="sleek-panel" style={{ padding: '20px' }}>

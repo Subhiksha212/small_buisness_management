@@ -13,6 +13,9 @@ class SSEService {
     this.heartbeatTimer = setInterval(() => {
       this.sendHeartbeat();
     }, 25000);
+    if (this.heartbeatTimer && typeof this.heartbeatTimer.unref === 'function') {
+      this.heartbeatTimer.unref();
+    }
   }
 
   /**

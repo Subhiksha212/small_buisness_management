@@ -5,12 +5,12 @@ node_modules/
 # Environment Variables & Credentials
 .env
 **/.env
-.env.local
-.env.*.local
-**/.env.*.local
+.env.*
+**/.env.*
 *.env
 **/*.env
 !**/.env.example
+!**/.env.*.example
 
 # Build Outputs
 dist/
@@ -32,3 +32,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 scratch/
+.vercel/
+
+.vercel

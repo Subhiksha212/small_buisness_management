@@ -90,6 +90,63 @@ export const getDashboardData = async (req, res) => {
 
     const bankFeedCount = await BankTransaction.countDocuments(bankFilter);
 
+    // Compute last 6 months trends from real database records
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const monthlyTrends = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthIdx = d.getMonth();
+      const monthLabel = monthNames[monthIdx];
+
+      const monthSales = metrics.allSales
+        ? metrics.allSales
+            .filter((s) => {
+              const sDate = new Date(s.createdAt);
+              return sDate.getFullYear() === year && sDate.getMonth() === monthIdx;
+            })
+            .reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+        : 0;
+
+      const monthSpent = metrics.allExpenses
+        ? metrics.allExpenses
+            .filter((e) => {
+              const eDate = new Date(e.createdAt);
+              return eDate.getFullYear() === year && eDate.getMonth() === monthIdx;
+            })
+            .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+        : 0;
+
+      monthlyTrends.push({
+        month: monthLabel,
+        year,
+        sales: Math.round(monthSales),
+        spent: Math.round(monthSpent),
+      });
+    }
+
+    // Calculate real % change vs previous month
+    const curSales = monthlyTrends[5]?.sales || 0;
+    const prevSales = monthlyTrends[4]?.sales || 0;
+    let salesTrendPct = '+0.0%';
+    if (prevSales > 0) {
+      const diff = (((curSales - prevSales) / prevSales) * 100).toFixed(1);
+      salesTrendPct = `${diff >= 0 ? '+' : ''}${diff}%`;
+    } else if (curSales > 0) {
+      salesTrendPct = '+100%';
+    }
+
+    const curSpent = monthlyTrends[5]?.spent || 0;
+    const prevSpent = monthlyTrends[4]?.spent || 0;
+    let spentTrendPct = '+0.0%';
+    if (prevSpent > 0) {
+      const diff = (((curSpent - prevSpent) / prevSpent) * 100).toFixed(1);
+      spentTrendPct = `${diff >= 0 ? '+' : ''}${diff}%`;
+    } else if (curSpent > 0) {
+      spentTrendPct = '+100%';
+    }
+
     res.status(200).json({
       period: metrics.period,
       startDate: metrics.startDate,
@@ -109,6 +166,9 @@ export const getDashboardData = async (req, res) => {
       salesByPaymentMethod: metrics.salesByPaymentMethod,
       expensesByCategory: metrics.expensesByCategory,
       recentTransactions,
+      monthlyTrends,
+      salesTrendPct,
+      spentTrendPct,
     });
   } catch (error) {
     console.error('Error fetching dashboard data:', error);

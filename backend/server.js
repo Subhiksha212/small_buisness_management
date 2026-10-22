@@ -18,8 +18,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect Database
-connectDB();
+// Connect Database (gracefully catches if offline so server doesn't crash on boot)
+connectDB().catch((err) => {
+  console.warn('Initial MongoDB connection attempt deferred:', err.message);
+});
 
 // Middleware - preserve rawBody for payment webhook signature verification
 app.use(cors());
@@ -55,12 +57,17 @@ app.use('/api/events', eventRoutes);
 app.use('/api/setu', setuRoutes);
 
 // Health check endpoint
-app.get('/', (req, res) => {
-  res.send('Smart Business Management System API is running...');
+app.get(['/', '/api', '/api/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Smart Business Management System API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+  });
 });
 
-// Start Server
-if (process.env.NODE_ENV !== 'test' && !process.argv.some((arg) => arg.includes('test'))) {
+// Start Server only in standalone Node.js environment (not in serverless or tests)
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test' && !process.argv.some((arg) => arg.includes('test'))) {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     if (process.env.PAYMENT_PROVIDER_KEY && process.env.PAYMENT_PROVIDER_SECRET) {
